@@ -130,14 +130,11 @@ bin/windows-amd64/${NAME}-signed.exe: bin/windows-amd64/${NAME}.exe codesign-cer
 #
 # ICON
 #
-icon.ico: images/icon-fullsize.webp
+icon.ico: images/icon-fullsize.svg
 	@mkdir -p tmp/
-	magick images/icon-fullsize.webp -gravity center -crop 80%x80%+0-50 +repage -resize 16x16 -background none -alpha on -write tmp/icon-16px.png null:
-	magick images/icon-fullsize.webp -gravity center -crop 80%x80%+0-50 +repage -resize 32x32 -background none -alpha on -write tmp/icon-32px.png null:
-	magick images/icon-fullsize.webp -gravity center -crop 80%x80%+0-50 +repage -resize 48x48 -background none -alpha on -write tmp/icon-48px.png null:
-	magick images/icon-fullsize.webp -gravity center -crop 85%x85%+0-40 +repage -resize 64x64 -background none -alpha on -write tmp/icon-64px.png null:
-	magick images/icon-fullsize.webp -gravity center -crop 90%x90%+0-30 +repage -resize 128x128 -background none -alpha on -write tmp/icon-128px.png null:
-	magick images/icon-fullsize.webp -resize 256x256 -write tmp/icon-256px.png null:
+	@for s in 16 32 48 64 128 256; do \
+		magick -background none "images/icon-fullsize.svg[$${s}x$${s}]" -alpha on "tmp/icon-$${s}px.png" 2>/dev/null || exit 1; \
+	done
 	magick tmp/icon-16px.png tmp/icon-32px.png tmp/icon-48px.png tmp/icon-64px.png tmp/icon-128px.png tmp/icon-256px.png -background none -alpha on icon.ico
 
 #Icon.png: images/icon-fullsize.webp
