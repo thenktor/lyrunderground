@@ -71,11 +71,6 @@ build: darwin windows
 .PHONY: sign
 sign: sign-windows sign-darwin
 
-.PHONY: release
-release: make-release.sh bin/darwin-arm64/${NAME}-signed bin/windows-amd64/${NAME}-signed.exe $(CSVS)
-	@echo ""
-	@./make-release.sh
-
 .PHONY: darwin windows
 darwin: bin/darwin-arm64/${NAME}
 windows: bin/windows-amd64/${NAME}.exe
@@ -102,16 +97,6 @@ run-darwin: darwin
 	@echo "Running darwin/arm64..."
 	@./bin/darwin-arm64/${NAME}
 
-.PHONY: install
-install: release
-ifeq ($(OS),Windows_NT)
-	$(error "Install is not supported on Windows, needs rsync!")
-else
-	@echo "Running rsync for installation..."
-	$(RSYNC) -av --del release/windows/ /Volumes/bibliothek/Deployment/files/${NAME}/
-	$(RSYNC) -av --del release/darwin/ /Volumes/bibliothek/Deployment/macos/${NAME}/
-endif
-
 #
 # PACKAGING
 #
@@ -119,7 +104,7 @@ package/darwin/$(APP_NAME).app: $(SRCS) Icon.png
 	@mkdir -p package/darwin/
 	@echo "Packaging for darwin..."
 	@rm -rf package/darwin/$(APP_NAME).app
-	fyne package -os darwin -name $(APP_NAME) -release
+	fyne package -os darwin -name $(APP_NAME) -release -use-raw-icon
 	mv $(APP_NAME).app package/darwin/
 
 #
@@ -155,8 +140,10 @@ icon.ico: images/icon-fullsize.webp
 	magick images/icon-fullsize.webp -resize 256x256 -write tmp/icon-256px.png null:
 	magick tmp/icon-16px.png tmp/icon-32px.png tmp/icon-48px.png tmp/icon-64px.png tmp/icon-128px.png tmp/icon-256px.png -background none -alpha on icon.ico
 
-Icon.png: images/icon-fullsize.webp
-	magick images/icon-fullsize.webp -resize 1024x1024 -write Icon.png null:
+#Icon.png: images/icon-fullsize.webp
+#	magick images/icon-fullsize.webp -resize 1024x1024 -write Icon.png null:
+Icon.png: images/icon-fullsize.svg
+	magick -background none "images/icon-fullsize.svg[1024x1024]" -define png:compression-level=9 "Icon.png" 2>/dev/null
 
 rsrc_windows_amd64.syso: icon.ico
 	@if [ -n "$(RSRC)" ]; then \
@@ -176,6 +163,7 @@ rsrc_windows_amd64.syso: icon.ico
 clean:
 	go clean
 	rm -rf bin/
-	rm -rf release/
+	rm -rf package/
 	rm -rf tmp/
 	rm -rf icon.ico rsrc_windows_amd64.syso
+	rm -rf Icon.png
