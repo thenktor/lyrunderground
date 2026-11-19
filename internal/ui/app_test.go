@@ -191,3 +191,26 @@ func TestClearList(t *testing.T) {
 		t.Fatalf("detail tags should be empty after clearing: %q", a.detailTags.Text)
 	}
 }
+
+func TestPublishTrackInfoUsesServerMetadata(t *testing.T) {
+	info := library.Track{
+		Artist:   "Local Artist",
+		Title:    "Local Title",
+		Album:    "Local Album",
+		Duration: 196 * time.Second,
+	}
+	record := &lrclib.Record{
+		ArtistName: "Server Artist",
+		TrackName:  "Server Title",
+		AlbumName:  "Server Album",
+	}
+	got := publishTrackInfo(info, record)
+	if got.ArtistName != "Server Artist" || got.TrackName != "Server Title" || got.AlbumName != "Server Album" {
+		t.Fatalf("unexpected publish metadata: %+v", got)
+	}
+
+	got = publishTrackInfo(info, nil)
+	if got.ArtistName != "Local Artist" || got.TrackName != "Local Title" || got.AlbumName != "Local Album" {
+		t.Fatalf("unexpected fallback metadata: %+v", got)
+	}
+}

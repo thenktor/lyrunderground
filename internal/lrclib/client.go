@@ -122,16 +122,26 @@ func NewClient() *Client {
 }
 
 // Check looks up the best matching lyrics record. It returns ErrNotFound when
-// the API responds with 404.
+// the API responds with 404. If an album-specific lookup fails, it retries
+// without the album filter to avoid false negatives when LRCLIB's album
+// normalization differs from the local tag.
 func (c *Client) Check(ctx context.Context, info TrackInfo) (*Record, error) {
 	if strings.TrimSpace(info.ArtistName) == "" || strings.TrimSpace(info.TrackName) == "" {
 		return nil, errors.New("Artist und Titel werden für die Suche benötigt")
 	}
 
+	record, err := c.checkOnce(ctx, info, true)
+	if errors.Is(err, ErrNotFound) && strings.TrimSpace(info.AlbumName) != "" {
+		return c.checkOnce(ctx, info, false)
+	}
+	return record, err
+}
+
+func (c *Client) checkOnce(ctx context.Context, info TrackInfo, withAlbum bool) (*Record, error) {
 	query := url.Values{}
 	query.Set("track_name", info.TrackName)
 	query.Set("artist_name", info.ArtistName)
-	if strings.TrimSpace(info.AlbumName) != "" {
+	if withAlbum && strings.TrimSpace(info.AlbumName) != "" {
 		query.Set("album_name", info.AlbumName)
 	}
 	if info.Duration > 0 {

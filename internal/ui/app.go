@@ -902,7 +902,7 @@ func (a *App) uploadCore(ctx context.Context, info library.Track, lyrics string,
 		onStatus("Erzeuge Publish-Token (Proof-of-Work, kann einige Sekunden dauern)…")
 	}
 	err = a.client.Publish(ctx, lrclib.PublishRequest{
-		TrackInfo:    infoOf(info),
+		TrackInfo:    publishTrackInfo(info, record),
 		Lyrics:       lyrics,
 		Synced:       synced,
 		Instrumental: instrumental,
@@ -911,6 +911,26 @@ func (a *App) uploadCore(ctx context.Context, info library.Track, lyrics string,
 		return outcomeFailed, record, err
 	}
 	return outcomeUploaded, record, nil
+}
+
+// publishTrackInfo prefers the metadata returned by LRCLIB when a track was
+// found. This keeps a new revision attached to the existing track even if the
+// local album tag differs from LRCLIB's stored value.
+func publishTrackInfo(info library.Track, record *lrclib.Record) lrclib.TrackInfo {
+	result := infoOf(info)
+	if record == nil {
+		return result
+	}
+	if strings.TrimSpace(record.ArtistName) != "" {
+		result.ArtistName = record.ArtistName
+	}
+	if strings.TrimSpace(record.TrackName) != "" {
+		result.TrackName = record.TrackName
+	}
+	if strings.TrimSpace(record.AlbumName) != "" {
+		result.AlbumName = record.AlbumName
+	}
+	return result
 }
 
 func (a *App) applyUploadOutcome(st *trackState, outcome uploadOutcome, record *lrclib.Record, err error) {

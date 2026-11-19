@@ -115,6 +115,12 @@ present in the tags.
   computed from it. This can take a few seconds depending on server load.
 - Existing server lyrics are not overwritten; the upload button is disabled
   accordingly after a successful check.
+- The lookup first uses the album name. If LRCLIB returns no match, it retries
+  without the album filter to avoid false negatives caused by differing album
+  normalization.
+- When a matching track is found, the upload uses the artist, title, and album
+  values returned by LRCLIB so that the new revision stays attached to the
+  existing track.
 - LRCLIB does not document a fixed propagation delay. After a successful upload,
   it can take up to 24 hours before the lyrics become available.
 

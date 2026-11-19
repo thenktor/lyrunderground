@@ -184,3 +184,37 @@ func TestPublishInstrumental(t *testing.T) {
 		t.Fatalf("unexpected payload: %+v", gotPayload)
 	}
 }
+
+func TestCheckFallsBackWithoutAlbum(t *testing.T) {
+	var albumFilters []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		albumFilters = append(albumFilters, r.URL.Query().Get("album_name"))
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("album_name") != "" {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = io.WriteString(w, `{"message":"Failed to find specified track","name":"TrackNotFound","statusCode":404}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"id":42,"trackName":"Titel","artistName":"Künstler","albumName":"Album","duration":196,"instrumental":false,"plainLyrics":"Zeile","syncedLyrics":null,"lyricsfile":""}`)
+	}))
+	defer server.Close()
+
+	record, err := testClient(server).Check(context.Background(), TrackInfo{
+		ArtistName: "Künstler",
+		TrackName:  "Titel",
+		AlbumName:  "Album",
+		Duration:   196 * time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.ID != 42 {
+		t.Fatalf("unexpected record: %+v", record)
+	}
+	if len(albumFilters) != 2 {
+		t.Fatalf("got %d requests, want 2 (with and without album)", len(albumFilters))
+	}
+	if albumFilters[0] != "Album" || albumFilters[1] != "" {
+		t.Fatalf("unexpected album filters: %#v", albumFilters)
+	}
+}
