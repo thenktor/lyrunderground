@@ -185,10 +185,13 @@ func New(win fyne.Window) *App {
 		container.NewHBox(a.chooseBtn, a.fileBtn, a.scanBtn),
 		a.folderEntry,
 	)
-	actionRow := container.NewHBox(a.uploadAllBtn, a.clearBtn, a.cancelBtn)
-	top := container.NewVBox(heading, hint, folderRow, actionRow)
+	top := container.NewVBox(heading, hint, folderRow)
 
-	left := container.NewBorder(a.listHeader, nil, nil, nil, a.list)
+	listFooter := container.NewVBox(
+		widget.NewSeparator(),
+		container.NewGridWithColumns(2, a.uploadAllBtn, a.clearBtn),
+	)
+	left := container.NewBorder(a.listHeader, listFooter, nil, nil, a.list)
 
 	detailTop := container.NewVBox(
 		a.detailTags,
@@ -202,7 +205,8 @@ func New(win fyne.Window) *App {
 	split := container.NewHSplit(left, detail)
 	split.SetOffset(0.36)
 
-	bottom := container.NewVBox(widget.NewSeparator(), a.status, a.progress)
+	progressRow := container.NewBorder(nil, nil, nil, a.cancelBtn, a.progress)
+	bottom := container.NewVBox(widget.NewSeparator(), a.status, progressRow)
 	content := container.NewBorder(top, bottom, nil, nil, split)
 	win.SetContent(content)
 
