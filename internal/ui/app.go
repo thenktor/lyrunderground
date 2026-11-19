@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -48,6 +49,8 @@ const (
 // lyrics, so give users a conservative upper bound.
 const lyricsAvailabilityNote = "Es kann bis zu 24 Stunden dauern, bis die Lyrics auf LRCLIB verfügbar sind."
 
+const maxLyricsBytes = 256 * 1024
+
 type bulkJob struct {
 	index        int
 	info         library.Track
@@ -84,6 +87,7 @@ type App struct {
 	detailStatus       *widget.Label
 	detailLyrics       *widget.Entry
 	detailInstrumental *widget.Check
+	updatingLyrics     bool
 	detailCheck        *widget.Button
 	detailUpload       *widget.Button
 
@@ -149,8 +153,18 @@ func New(win fyne.Window) *App {
 	a.detailLyrics.SetPlaceHolder("Lyrics einfügen – entweder Klartext oder LRC mit Zeitstempeln wie [00:12.34]…")
 	a.detailLyrics.Wrapping = fyne.TextWrapWord
 	a.detailLyrics.OnChanged = func(text string) {
-		if a.selected < 0 || a.selected >= len(a.tracks) {
+		if a.updatingLyrics || a.selected < 0 || a.selected >= len(a.tracks) {
 			return
+		}
+		limited, truncated := limitLyricsText(text)
+		if truncated {
+			a.updatingLyrics = true
+			a.detailLyrics.SetText(limited)
+			a.detailLyrics.Text = limited
+			a.detailLyrics.Refresh()
+			a.updatingLyrics = false
+			a.setGlobalStatus("Lyrics auf 256 KiB begrenzt.", widget.WarningImportance)
+			text = limited
 		}
 		a.tracks[a.selected].lyrics = text
 		a.refreshDetailControls()
@@ -838,6 +852,17 @@ func lyricsFromRecord(record *lrclib.Record) string {
 	return strings.TrimSpace(lyrics)
 }
 
+func limitLyricsText(text string) (string, bool) {
+	if len(text) <= maxLyricsBytes {
+		return text, false
+	}
+	text = text[:maxLyricsBytes]
+	for len(text) > 0 && !utf8.ValidString(text) {
+		text = text[:len(text)-1]
+	}
+	return text, true
+}
+
 func (a *App) applyCheckOutcome(st *trackState, record *lrclib.Record, err error) {
 	switch {
 	case errors.Is(err, lrclib.ErrNotFound):
@@ -866,11 +891,15 @@ func (a *App) applyCheckOutcome(st *trackState, record *lrclib.Record, err error
 		st.instrument = record.Instrumental
 		if record.HasLyrics() {
 			st.exists = true
-			if lyrics := lyricsFromRecord(record); lyrics != "" {
+			lyrics, truncated := limitLyricsText(lyricsFromRecord(record))
+			if lyrics != "" {
 				st.lyrics = lyrics
 				st.status = fmt.Sprintf("Bereits auf LRCLIB vorhanden (ID %d) – Lyrics geladen.", record.ID)
 			} else {
 				st.status = fmt.Sprintf("Bereits auf LRCLIB vorhanden (ID %d).", record.ID)
+			}
+			if truncated {
+				st.status += " Lyrics wurden auf 256 KiB begrenzt."
 			}
 			st.importance = widget.SuccessImportance
 		} else {
@@ -1202,14 +1231,18 @@ func (a *App) runBulk(ctx context.Context, jobs []bulkJob, upload bool) {
 }
 
 func newTrackState(track library.Track) *trackState {
+	lyrics, truncated := limitLyricsText(track.Lyrics)
 	st := &trackState{
 		info:   track,
-		lyrics: track.Lyrics,
+		lyrics: lyrics,
 	}
 	switch {
 	case !track.HasRequiredMetadata():
 		st.status = "Nicht hochladbar – fehlende Angaben: " + strings.Join(track.MissingFields(), ", ")
 		st.importance = widget.DangerImportance
+	case truncated:
+		st.status = "Lyrics-Tag auf 256 KiB begrenzt."
+		st.importance = widget.WarningImportance
 	case len(track.Warnings) > 0:
 		st.status = "Bereit. Hinweis: " + track.Warnings[0]
 		st.importance = widget.WarningImportance
@@ -1251,7 +1284,9 @@ func (a *App) updateDetail() {
 	a.detailStatus.SetText(st.status)
 	a.detailStatus.Refresh()
 	if a.detailLyrics.Text != st.lyrics {
+		a.updatingLyrics = true
 		a.detailLyrics.SetText(st.lyrics)
+		a.updatingLyrics = false
 	}
 	if a.detailInstrumental.Checked != st.instrumentalUpload {
 		a.detailInstrumental.SetChecked(st.instrumentalUpload)
@@ -1265,7 +1300,9 @@ func (a *App) clearDetail() {
 	a.detailStatus.SetText("Öffne einen Albumordner und wähle eine Datei aus der Liste.")
 	a.detailStatus.Refresh()
 	if a.detailLyrics.Text != "" {
+		a.updatingLyrics = true
 		a.detailLyrics.SetText("")
+		a.updatingLyrics = false
 	}
 	if a.detailInstrumental.Checked {
 		a.detailInstrumental.SetChecked(false)

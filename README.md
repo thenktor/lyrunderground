@@ -19,7 +19,7 @@ audio files and uploads lyrics to [LRCLIB](https://lrclib.net).
 - For the selected file, the detail pane shows artist, title, album, duration,
   format, filename, and the status of the embedded lyrics tag.
 - A multiline lyrics field for the selected file. Existing tag lyrics are
-  filled in automatically.
+  filled in automatically. The field is limited to 256 KiB.
 - Per selected file:
   - **Check** queries LRCLIB for existing lyrics. Existing server lyrics are
     loaded directly into the lyrics field.

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/storage"
@@ -212,5 +213,52 @@ func TestPublishTrackInfoUsesServerMetadata(t *testing.T) {
 	got = publishTrackInfo(info, nil)
 	if got.ArtistName != "Local Artist" || got.TrackName != "Local Title" || got.AlbumName != "Local Album" {
 		t.Fatalf("unexpected fallback metadata: %+v", got)
+	}
+}
+
+func TestLimitLyricsText(t *testing.T) {
+	long := strings.Repeat("a", maxLyricsBytes+100)
+	got, truncated := limitLyricsText(long)
+	if !truncated {
+		t.Fatal("expected truncation")
+	}
+	if len(got) != maxLyricsBytes {
+		t.Fatalf("len = %d, want %d", len(got), maxLyricsBytes)
+	}
+
+	boundary := strings.Repeat("a", maxLyricsBytes-1) + "ä"
+	got, truncated = limitLyricsText(boundary)
+	if !truncated {
+		t.Fatal("expected truncation at UTF-8 boundary")
+	}
+	if !utf8.ValidString(got) {
+		t.Fatalf("truncated text is not valid UTF-8: %q", got[len(got)-4:])
+	}
+	if len(got) > maxLyricsBytes {
+		t.Fatalf("len = %d, want <= %d", len(got), maxLyricsBytes)
+	}
+}
+
+func TestLyricsFieldLimit(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	win := test.NewWindow(nil)
+	win.Resize(fyne.NewSize(1200, 800))
+	a := New(win)
+	a.autoCheck = false
+
+	st := newTrackState(library.Track{
+		Artist: "Artist", Title: "Title", Duration: 100 * time.Second,
+	})
+	a.tracks = []*trackState{st}
+	a.selected = 0
+	a.updateDetail()
+
+	a.detailLyrics.SetText(strings.Repeat("x", maxLyricsBytes+100))
+	if len(a.detailLyrics.Text) != maxLyricsBytes {
+		t.Fatalf("field length = %d, want %d", len(a.detailLyrics.Text), maxLyricsBytes)
+	}
+	if len(st.lyrics) != maxLyricsBytes {
+		t.Fatalf("state length = %d, want %d", len(st.lyrics), maxLyricsBytes)
 	}
 }
