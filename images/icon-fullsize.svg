@@ -1,0 +1,159 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#14202b"/>
+      <stop offset="1" stop-color="#070b10"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#66d9ff"/>
+      <stop offset="0.5" stop-color="#2d9cff"/>
+      <stop offset="1" stop-color="#0a4fa8"/>
+    </linearGradient>
+    <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffe8a3"/>
+      <stop offset="0.55" stop-color="#f7d488"/>
+      <stop offset="1" stop-color="#d99b3d"/>
+    </linearGradient>
+    <linearGradient id="arrow" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#1268ff"/>
+      <stop offset="0.55" stop-color="#2d9cff"/>
+      <stop offset="1" stop-color="#66d9ff"/>
+    </linearGradient>
+    <radialGradient id="vinyl" cx="0.35" cy="0.28" r="0.8">
+      <stop offset="0" stop-color="#2b333b"/>
+      <stop offset="0.55" stop-color="#11161b"/>
+      <stop offset="1" stop-color="#030507"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#2d9cff" stop-opacity="0.35"/>
+      <stop offset="0.6" stop-color="#2d9cff" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#2d9cff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="0.45" stop-color="#ffffff" stop-opacity="0.05"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="glossPaper" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.38"/>
+      <stop offset="0.55" stop-color="#ffffff" stop-opacity="0.06"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="paperShade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8a5a1c" stop-opacity="0"/>
+      <stop offset="1" stop-color="#8a5a1c" stop-opacity="0.22"/>
+    </linearGradient>
+    <linearGradient id="fold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#b8792a"/>
+      <stop offset="1" stop-color="#ffe8a3"/>
+    </linearGradient>
+
+    <!-- soft shadow / glow blurs -->
+    <filter id="paperShadow" x="-40%" y="-40%" width="190%" height="190%">
+      <feGaussianBlur stdDeviation="22"/>
+    </filter>
+    <filter id="arrowGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="16"/>
+    </filter>
+    <!-- fine paper grain -->
+    <filter id="grain" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch"/>
+      <feColorMatrix type="saturate" values="0"/>
+    </filter>
+    <clipPath id="paperClip">
+      <rect x="300" y="250" width="424" height="472" rx="28"/>
+    </clipPath>
+    <clipPath id="safe">
+      <rect x="100" y="100" width="824" height="824" rx="185.4"/>
+    </clipPath>
+  </defs>
+
+  <!-- macOS safe-area rounded square -->
+  <rect x="100" y="100" width="824" height="824" rx="185.4" fill="url(#bg)"/>
+
+  <g clip-path="url(#safe)">
+    <!-- soft blue glow behind the record -->
+    <circle cx="512" cy="486" r="470" fill="url(#glow)"/>
+
+    <!-- subtle inner edge highlight -->
+    <rect x="104" y="104" width="816" height="816" rx="182" fill="none" stroke="#8fd8ff" stroke-width="3" opacity="0.16"/>
+
+    <!-- artwork group: scaled so the record fills the safe area -->
+    <g transform="translate(512 512) scale(1.14) translate(-512 -512)">
+
+    <!-- vinyl record -->
+    <circle cx="512" cy="512" r="322" fill="url(#vinyl)" stroke="url(#rim)" stroke-width="12"/>
+    <g fill="none" stroke="#39434d">
+      <circle cx="512" cy="512" r="300" stroke-width="3" opacity="0.5"/>
+      <circle cx="512" cy="512" r="286" stroke-width="5" opacity="0.75"/>
+      <circle cx="512" cy="512" r="270" stroke-width="3" opacity="0.55"/>
+      <circle cx="512" cy="512" r="250" stroke-width="4" opacity="0.65"/>
+      <circle cx="512" cy="512" r="232" stroke-width="3" opacity="0.5"/>
+      <circle cx="512" cy="512" r="214" stroke-width="4" opacity="0.55"/>
+      <circle cx="512" cy="512" r="196" stroke-width="3" opacity="0.45"/>
+      <circle cx="512" cy="512" r="178" stroke-width="3" opacity="0.45"/>
+      <circle cx="512" cy="512" r="156" stroke-width="2.5" opacity="0.35"/>
+    </g>
+    <!-- rim highlight holding the light -->
+    <path d="M512 200 a312 312 0 0 1 269 155" fill="none" stroke="#bdefff" stroke-width="8" stroke-linecap="round" opacity="0.35"/>
+    <!-- glossy sheen sweeping across the grooves -->
+    <circle cx="512" cy="512" r="318" fill="url(#sheen)" opacity="0.55"/>
+
+    <!-- centre label -->
+    <circle cx="512" cy="512" r="134" fill="#0b1117" stroke="#66d9ff" stroke-width="5"/>
+    <circle cx="512" cy="512" r="126" fill="none" stroke="#66d9ff" stroke-width="2" opacity="0.35"/>
+    <circle cx="512" cy="512" r="22" fill="#050a0f" stroke="#66d9ff" stroke-width="4"/>
+    <circle cx="512" cy="512" r="6" fill="#1a2b38"/>
+
+    <!-- lyric sheet -->
+    <g transform="rotate(-8 512 500)">
+      <rect x="312" y="268" width="424" height="472" rx="28" fill="#000000" opacity="0.55" filter="url(#paperShadow)"/>
+      <g clip-path="url(#paperClip)">
+        <rect x="300" y="250" width="424" height="472" fill="url(#paper)"/>
+        <!-- soft light falling across the sheet -->
+        <rect x="300" y="250" width="424" height="472" fill="url(#glossPaper)"/>
+        <!-- paper grain -->
+        <rect x="300" y="250" width="424" height="472" fill="#8a5a1c" opacity="0.09" filter="url(#grain)"/>
+        <!-- warm shading towards the bottom edge -->
+        <rect x="300" y="480" width="424" height="242" fill="url(#paperShade)"/>
+        <!-- notebook margin rule -->
+        <path d="M332 268 V704" stroke="#a8352b" stroke-width="4" stroke-linecap="round" opacity="0.18"/>
+      </g>
+      <rect x="300" y="250" width="424" height="472" rx="28" fill="none" stroke="#8a5a1c" stroke-width="7"/>
+      <rect x="314" y="264" width="396" height="444" rx="18" fill="none" stroke="#ffffff" stroke-width="5" opacity="0.26"/>
+
+      <!-- tiny lyric header line -->
+      <path d="M354 296 H410" stroke="#8a5a1c" stroke-width="9" stroke-linecap="round" opacity="0.45"/>
+
+      <!-- Love me -->
+      <text x="352" y="362" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-weight="700" font-size="60" fill="#17212b">Love me</text>
+      <!-- little heart doodle -->
+      <path d="M664 332 c-14 -22 -44 -8 -32 14 c8 16 32 30 32 30 c0 0 24 -14 32 -30 c12 -22 -18 -36 -32 -14 z" fill="#b8382c" stroke="#8f2a21" stroke-width="7" stroke-linejoin="round" opacity="0.92"/>
+
+      <!-- Hate me -->
+      <text x="352" y="450" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-weight="700" font-size="60" fill="#17212b">Hate me</text>
+      <!-- skull (counterpart to the love heart) -->
+      <g transform="translate(665 437) scale(1.2)">
+        <path d="M-22 -4 C-22 -20 -12 -27 0 -27 C12 -27 22 -20 22 -4 C22 2 20 5 17 7 C15 8.6 14 10 14 13 C14 17.5 11 21 6 21 L-6 21 C-11 21 -14 17.5 -14 13 C-14 10 -15 8.6 -17 7 C-20 5 -22 2 -22 -4 Z"
+              fill="#fdf8ee" stroke="#25313d" stroke-width="4" stroke-linejoin="round"/>
+        <ellipse cx="-8.7" cy="-7.6" rx="6.8" ry="8" fill="#25313d"/>
+        <ellipse cx="8.7" cy="-7.6" rx="6.8" ry="8" fill="#25313d"/>
+        <path d="M0 -1 L-4 6.4 L4 6.4 Z" fill="#25313d"/>
+        <path d="M-4.6 12 L-4.6 21 M0.2 12.4 L0.2 21 M5 12 L5 21" stroke="#25313d" stroke-width="3" stroke-linecap="round" fill="none"/>
+      </g>
+      <!-- folded bottom corner -->
+      <path d="M724 618 v76 a28 28 0 0 1 -28 28 h-76 z" fill="url(#fold)" stroke="#8a5a1c" stroke-width="6" stroke-linejoin="round"/>
+      <path d="M724 618 l-104 104" fill="none" stroke="#8a5a1c" stroke-width="5" opacity="0.5"/>
+    </g>
+
+    <!-- upload arrow -->
+    <path d="M512 352 L662 532 H578 V704 H446 V532 H362 Z" fill="#3cc8ff" opacity="0.55" filter="url(#arrowGlow)" transform="translate(512 640) scale(0.78) translate(-512 -528)"/>
+    <g transform="translate(512 640) scale(0.78) translate(-512 -528)">
+      <g stroke="#07101a" stroke-width="26" stroke-linejoin="round">
+        <path d="M512 352 L662 532 H578 V704 H446 V532 H362 Z" fill="url(#arrow)"/>
+      </g>
+      <path d="M512 383 L619 512 L558 512 L558 684 L466 684 L466 512 L405 512 Z" fill="none" stroke="#bdefff" stroke-width="10" opacity="0.5" stroke-linejoin="round"/>
+      </g>
+    </g>
+  </g>
+</svg>
