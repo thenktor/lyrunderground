@@ -25,6 +25,9 @@ audio files and uploads lyrics to [LRCLIB](https://lrclib.net).
     loaded directly into the lyrics field.
   - **Upload** becomes available only after a check has confirmed that LRCLIB
     does not yet have lyrics for the track.
+  - **Force upload** (`Hochladen erzwingen`) bypasses the existing-lyrics check
+    and intentionally creates a new revision. The option is cleared after a
+    successful upload.
   - **Instrumental (no lyrics)** intentionally sends no lyrics fields; LRCLIB
     then marks the track as instrumental.
 - **Upload all** processes the list sequentially. Requests are throttled and
@@ -113,8 +116,9 @@ present in the tags.
   header is honored and the request is retried if necessary.
 - During upload, a challenge is requested first, and a publish token is
   computed from it. This can take a few seconds depending on server load.
-- Existing server lyrics are not overwritten; the upload button is disabled
-  accordingly after a successful check.
+- Existing server lyrics are not overwritten by default; the upload button is
+  disabled accordingly after a successful check. Force upload is the explicit
+  exception.
 - The lookup first uses the album name. If LRCLIB returns no match, it retries
   without the album filter to avoid false negatives caused by differing album
   normalization.
@@ -123,6 +127,8 @@ present in the tags.
   existing track.
 - LRCLIB does not document a fixed propagation delay. After a successful upload,
   it can take up to 24 hours before the lyrics become available.
+- Force upload deliberately creates a new revision even when lyrics already
+  exist. Use it only for intentional corrections or updates.
 
 ## Tests
 

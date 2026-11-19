@@ -34,6 +34,7 @@ type trackState struct {
 	exists             bool
 	instrument         bool
 	instrumentalUpload bool
+	forceUpload        bool
 	recordID           int64
 }
 
@@ -57,6 +58,7 @@ type bulkJob struct {
 	lyrics       string
 	required     bool
 	instrumental bool
+	forceUpload  bool
 }
 
 // App stores the state of the running application. Tracks and their UI state
@@ -87,6 +89,7 @@ type App struct {
 	detailStatus       *widget.Label
 	detailLyrics       *widget.Entry
 	detailInstrumental *widget.Check
+	detailForceUpload  *widget.Check
 	updatingLyrics     bool
 	detailCheck        *widget.Button
 	detailUpload       *widget.Button
@@ -178,6 +181,14 @@ func New(win fyne.Window) *App {
 		a.refreshDetailControls()
 	})
 
+	a.detailForceUpload = widget.NewCheck("Hochladen erzwingen", func(checked bool) {
+		if a.selected < 0 || a.selected >= len(a.tracks) {
+			return
+		}
+		a.tracks[a.selected].forceUpload = checked
+		a.refreshDetailControls()
+	})
+
 	a.detailCheck = widget.NewButton("Prüfen", func() {
 		if a.selected >= 0 {
 			a.checkOne(a.selected)
@@ -213,7 +224,7 @@ func New(win fyne.Window) *App {
 		widget.NewSeparator(),
 		container.NewHBox(widget.NewLabel("Lyrics:"), a.detailInstrumental),
 	)
-	detailButtons := container.NewHBox(a.detailCheck, a.detailUpload)
+	detailButtons := container.NewHBox(a.detailCheck, a.detailUpload, a.detailForceUpload)
 	detail := container.NewBorder(detailTop, detailButtons, nil, nil, a.detailLyrics)
 
 	split := container.NewHSplit(left, detail)
@@ -769,8 +780,8 @@ func (a *App) uploadOne(index int) {
 		a.setMissingMetadataError(index)
 		return
 	}
-	if !st.checked || st.exists {
-		st.status = "Bitte zuerst prüfen – Upload erst nach bestätigtem Fehlen der Lyrics."
+	if !st.forceUpload && (!st.checked || st.exists) {
+		st.status = "Bitte zuerst prüfen – Upload erst nach bestätigtem Fehlen der Lyrics (oder „Hochladen erzwingen“ aktivieren)."
 		st.importance = widget.WarningImportance
 		a.refreshTrack(index)
 		return
@@ -786,6 +797,7 @@ func (a *App) uploadOne(index int) {
 	info := st.info
 	synced := library.IsSyncedLyrics(lyrics)
 	instrumental := st.instrumentalUpload
+	force := st.forceUpload
 	st.busy = true
 	st.status = "Prüfe, ob Lyrics bereits vorhanden sind…"
 	st.importance = widget.MediumImportance
@@ -796,7 +808,7 @@ func (a *App) uploadOne(index int) {
 		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
 		defer cancel()
 
-		outcome, record, err := a.uploadCore(ctx, info, lyrics, synced, instrumental, func(message string) {
+		outcome, record, err := a.uploadCore(ctx, info, lyrics, synced, instrumental, force, func(message string) {
 			fyne.DoAndWait(func() {
 				if !a.currentTrack(index, st) {
 					return
@@ -914,13 +926,13 @@ func (a *App) applyCheckOutcome(st *trackState, record *lrclib.Record, err error
 	}
 }
 
-func (a *App) uploadCore(ctx context.Context, info library.Track, lyrics string, synced, instrumental bool, onStatus func(string)) (uploadOutcome, *lrclib.Record, error) {
+func (a *App) uploadCore(ctx context.Context, info library.Track, lyrics string, synced, instrumental, force bool, onStatus func(string)) (uploadOutcome, *lrclib.Record, error) {
 	if onStatus != nil {
 		onStatus("Prüfe, ob Lyrics bereits vorhanden sind…")
 	}
 	record, err := a.client.Check(ctx, infoOf(info))
 	if err == nil {
-		if record.HasLyrics() {
+		if record.HasLyrics() && !force {
 			return outcomeAlreadyPresent, record, nil
 		}
 	} else if !errors.Is(err, lrclib.ErrNotFound) {
@@ -980,14 +992,21 @@ func (a *App) applyUploadOutcome(st *trackState, outcome uploadOutcome, record *
 
 	switch outcome {
 	case outcomeUploaded:
+		forced := st.forceUpload
 		st.checked = true
 		st.exists = true
+		st.forceUpload = false
 		if record != nil {
 			st.recordID = record.ID
 		}
-		if st.instrumentalUpload {
+		switch {
+		case st.instrumentalUpload && forced:
+			st.status = "Erfolgreich als instrumental (erzwungen) auf LRCLIB hochgeladen. " + lyricsAvailabilityNote
+		case forced:
+			st.status = "Erfolgreich (erzwungen) auf LRCLIB hochgeladen. " + lyricsAvailabilityNote
+		case st.instrumentalUpload:
 			st.status = "Erfolgreich als instrumental auf LRCLIB hochgeladen. " + lyricsAvailabilityNote
-		} else {
+		default:
 			st.status = "Erfolgreich auf LRCLIB hochgeladen. " + lyricsAvailabilityNote
 		}
 		st.importance = widget.SuccessImportance
@@ -1032,6 +1051,7 @@ func (a *App) startBulkFor(indices []int, upload bool) {
 			lyrics:       strings.TrimSpace(st.lyrics),
 			required:     st.info.HasRequiredMetadata(),
 			instrumental: st.instrumentalUpload,
+			forceUpload:  st.forceUpload,
 		})
 	}
 	if len(jobs) == 0 {
@@ -1131,7 +1151,7 @@ func (a *App) runBulk(ctx context.Context, jobs []bulkJob, upload bool) {
 		}
 
 		if upload {
-			outcome, record, err := a.uploadCore(ctx, job.info, job.lyrics, library.IsSyncedLyrics(job.lyrics), job.instrumental, func(message string) {
+			outcome, record, err := a.uploadCore(ctx, job.info, job.lyrics, library.IsSyncedLyrics(job.lyrics), job.instrumental, job.forceUpload, func(message string) {
 				fyne.DoAndWait(func() {
 					st := a.tracks[job.index]
 					st.status = message
@@ -1291,6 +1311,9 @@ func (a *App) updateDetail() {
 	if a.detailInstrumental.Checked != st.instrumentalUpload {
 		a.detailInstrumental.SetChecked(st.instrumentalUpload)
 	}
+	if a.detailForceUpload.Checked != st.forceUpload {
+		a.detailForceUpload.SetChecked(st.forceUpload)
+	}
 	a.refreshDetailControls()
 }
 
@@ -1307,8 +1330,12 @@ func (a *App) clearDetail() {
 	if a.detailInstrumental.Checked {
 		a.detailInstrumental.SetChecked(false)
 	}
+	if a.detailForceUpload.Checked {
+		a.detailForceUpload.SetChecked(false)
+	}
 	a.detailLyrics.Disable()
 	a.detailInstrumental.Disable()
+	a.detailForceUpload.Disable()
 	a.detailCheck.Disable()
 	a.detailUpload.Disable()
 }
@@ -1317,6 +1344,7 @@ func (a *App) refreshDetailControls() {
 	if a.selected < 0 || a.selected >= len(a.tracks) {
 		a.detailLyrics.Disable()
 		a.detailInstrumental.Disable()
+		a.detailForceUpload.Disable()
 		a.detailCheck.Disable()
 		a.detailUpload.Disable()
 		return
@@ -1335,8 +1363,13 @@ func (a *App) refreshDetailControls() {
 	} else {
 		a.detailInstrumental.Enable()
 	}
+	if busy {
+		a.detailForceUpload.Disable()
+	} else {
+		a.detailForceUpload.Enable()
+	}
 
-	canUpload := canOperate && st.checked && !st.exists && (st.instrumentalUpload || strings.TrimSpace(st.lyrics) != "")
+	canUpload := canOperate && (st.forceUpload || (st.checked && !st.exists)) && (st.instrumentalUpload || strings.TrimSpace(st.lyrics) != "")
 	if canUpload {
 		a.detailUpload.Enable()
 	} else {

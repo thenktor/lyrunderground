@@ -1,6 +1,9 @@
 package ui
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -260,5 +263,106 @@ func TestLyricsFieldLimit(t *testing.T) {
 	}
 	if len(st.lyrics) != maxLyricsBytes {
 		t.Fatalf("state length = %d, want %d", len(st.lyrics), maxLyricsBytes)
+	}
+}
+
+func TestForceUploadEnablesUploadWithExistingLyrics(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	win := test.NewWindow(nil)
+	win.Resize(fyne.NewSize(1200, 800))
+	a := New(win)
+	a.autoCheck = false
+
+	st := newTrackState(library.Track{
+		Artist: "Artist", Title: "Title", Duration: 100 * time.Second,
+		Lyrics: "Local lyrics",
+	})
+	a.tracks = []*trackState{st}
+	a.selected = 0
+	st.checked = true
+	st.exists = true
+	a.updateDetail()
+
+	if !a.detailUpload.Disabled() {
+		t.Fatal("upload must be disabled when lyrics exist and force is off")
+	}
+	if a.detailForceUpload.Checked {
+		t.Fatal("force checkbox must be off by default")
+	}
+
+	st.forceUpload = true
+	a.updateDetail()
+	if a.detailUpload.Disabled() {
+		t.Fatal("upload must be enabled when force is active")
+	}
+	if !a.detailForceUpload.Checked {
+		t.Fatal("force checkbox must reflect the track state")
+	}
+}
+
+func TestForcedUploadClearsForceFlag(t *testing.T) {
+	st := newTrackState(library.Track{
+		Artist: "Artist", Title: "Title", Duration: 100 * time.Second,
+		Lyrics: "Local lyrics",
+	})
+	st.forceUpload = true
+	(&App{}).applyUploadOutcome(st, outcomeUploaded, nil, nil)
+
+	if st.forceUpload {
+		t.Fatal("force flag must be cleared after a successful upload")
+	}
+	if !strings.Contains(st.status, "erzwungen") {
+		t.Fatalf("status does not mention forced upload: %q", st.status)
+	}
+}
+
+func TestForcedUploadPublishesOverExistingLyrics(t *testing.T) {
+	published := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/get":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":42,"trackName":"Title","artistName":"Artist","albumName":"Album","duration":100,"plainLyrics":"existing"}`))
+		case "/api/request-challenge":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"prefix":"test","target":"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"}`))
+		case "/api/publish":
+			published = true
+			w.WriteHeader(http.StatusCreated)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	a := &App{client: &lrclib.Client{
+		BaseURL:            server.URL,
+		HTTPClient:         server.Client(),
+		MinRequestInterval: 0,
+		MaxRetries:         0,
+	}}
+	info := library.Track{Artist: "Artist", Title: "Title", Album: "Album", Duration: 100 * time.Second}
+
+	outcome, _, err := a.uploadCore(context.Background(), info, "new lyrics", false, false, false, nil)
+	if err != nil {
+		t.Fatalf("unforced upload failed: %v", err)
+	}
+	if outcome != outcomeAlreadyPresent {
+		t.Fatalf("outcome = %v, want outcomeAlreadyPresent", outcome)
+	}
+	if published {
+		t.Fatal("unforced upload must not publish over existing lyrics")
+	}
+
+	outcome, _, err = a.uploadCore(context.Background(), info, "new lyrics", false, false, true, nil)
+	if err != nil {
+		t.Fatalf("forced upload failed: %v", err)
+	}
+	if outcome != outcomeUploaded {
+		t.Fatalf("outcome = %v, want outcomeUploaded", outcome)
+	}
+	if !published {
+		t.Fatal("forced upload must publish over existing lyrics")
 	}
 }
