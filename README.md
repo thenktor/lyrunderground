@@ -18,11 +18,13 @@ audio files and uploads lyrics to [LRCLIB](https://lrclib.net).
   - M4A via `mvhd`/`mdhd`.
 - For the selected file, the detail pane shows artist, title, album, duration,
   format, filename, and the status of the embedded lyrics tag.
-- A multiline lyrics field for the selected file. Existing tag lyrics are
-  filled in automatically. The field is limited to 256 KiB.
+- Two lyrics tabs for the selected file: an editable **Tag** tab and a
+  read-only **LRCLIB** tab. Existing tag lyrics are filled in automatically.
+  Both sources are cached per track, so switching tabs does not lose content.
+  The editable field is limited to 256 KiB.
 - Per selected file:
   - **Check** queries LRCLIB for existing lyrics. Existing server lyrics are
-    loaded directly into the lyrics field.
+    shown in the read-only **LRCLIB** tab without overwriting the tag lyrics.
   - **Upload** becomes available only after a check has confirmed that LRCLIB
     does not yet have lyrics for the track.
   - **Force upload** (`Hochladen erzwingen`) bypasses the existing-lyrics check

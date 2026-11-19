@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image/color"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,8 +24,9 @@ import (
 )
 
 type trackState struct {
-	info   library.Track
-	lyrics string
+	info         library.Track
+	lyrics       string
+	serverLyrics string
 
 	status     string
 	importance widget.Importance
@@ -51,6 +53,36 @@ const (
 const lyricsAvailabilityNote = "Es kann bis zu 24 Stunden dauern, bis die Lyrics auf LRCLIB verfügbar sind."
 
 const maxLyricsBytes = 256 * 1024
+
+const readOnlyLyricsForegroundMix = 0.65
+
+type readOnlyLyricsTheme struct {
+	fyne.Theme
+	dimmed bool
+}
+
+func (t readOnlyLyricsTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) color.Color {
+	if t.dimmed || name != theme.ColorNameDisabled {
+		return t.Theme.Color(name, variant)
+	}
+	disabled := t.Theme.Color(theme.ColorNameDisabled, variant)
+	foreground := t.Theme.Color(theme.ColorNameForeground, variant)
+	return blendColor(disabled, foreground, readOnlyLyricsForegroundMix)
+}
+
+func blendColor(base, overlay color.Color, overlayWeight float64) color.Color {
+	b := color.NRGBAModel.Convert(base).(color.NRGBA)
+	o := color.NRGBAModel.Convert(overlay).(color.NRGBA)
+	mix := func(a, c uint8) uint8 {
+		return uint8(float64(a)*(1-overlayWeight) + float64(c)*overlayWeight)
+	}
+	return color.NRGBA{
+		R: mix(b.R, o.R),
+		G: mix(b.G, o.G),
+		B: mix(b.B, o.B),
+		A: b.A,
+	}
+}
 
 type bulkJob struct {
 	index        int
@@ -88,6 +120,10 @@ type App struct {
 	detailTags         *widget.Label
 	detailStatus       *widget.Label
 	detailLyrics       *widget.Entry
+	detailServerLyrics *widget.Entry
+	detailServerTab    *container.ThemeOverride
+	detailTabs         *container.AppTabs
+	serverLyricsDimmed bool
 	detailInstrumental *widget.Check
 	detailForceUpload  *widget.Check
 	updatingLyrics     bool
@@ -173,6 +209,20 @@ func New(win fyne.Window) *App {
 		a.refreshDetailControls()
 	}
 
+	a.detailServerLyrics = widget.NewMultiLineEntry()
+	a.detailServerLyrics.SetPlaceHolder("Noch keine LRCLIB-Lyrics geladen.")
+	a.detailServerLyrics.Wrapping = fyne.TextWrapWord
+	a.detailServerLyrics.Disable()
+
+	a.detailServerTab = container.NewThemeOverride(
+		a.detailServerLyrics,
+		readOnlyLyricsTheme{Theme: fyne.CurrentApp().Settings().Theme()},
+	)
+	a.detailTabs = container.NewAppTabs(
+		container.NewTabItem("Tag", a.detailLyrics),
+		container.NewTabItem("LRCLIB", a.detailServerTab),
+	)
+
 	a.detailInstrumental = widget.NewCheck("Instrumental (keine Lyrics)", func(checked bool) {
 		if a.selected < 0 || a.selected >= len(a.tracks) {
 			return
@@ -225,7 +275,7 @@ func New(win fyne.Window) *App {
 		container.NewHBox(widget.NewLabel("Lyrics:"), a.detailInstrumental),
 	)
 	detailButtons := container.NewHBox(a.detailCheck, a.detailUpload, a.detailForceUpload)
-	detail := container.NewBorder(detailTop, detailButtons, nil, nil, a.detailLyrics)
+	detail := container.NewBorder(detailTop, detailButtons, nil, nil, a.detailTabs)
 
 	split := container.NewHSplit(left, detail)
 	split.SetOffset(0.36)
@@ -882,6 +932,7 @@ func (a *App) applyCheckOutcome(st *trackState, record *lrclib.Record, err error
 		st.exists = false
 		st.instrument = false
 		st.recordID = 0
+		st.serverLyrics = ""
 		st.status = "Noch nicht auf LRCLIB vorhanden – Upload möglich."
 		st.importance = widget.MediumImportance
 	case err != nil:
@@ -903,10 +954,10 @@ func (a *App) applyCheckOutcome(st *trackState, record *lrclib.Record, err error
 		st.instrument = record.Instrumental
 		if record.HasLyrics() {
 			st.exists = true
-			lyrics, truncated := limitLyricsText(lyricsFromRecord(record))
-			if lyrics != "" {
-				st.lyrics = lyrics
-				st.status = fmt.Sprintf("Bereits auf LRCLIB vorhanden (ID %d) – Lyrics geladen.", record.ID)
+			serverLyrics, truncated := limitLyricsText(lyricsFromRecord(record))
+			st.serverLyrics = serverLyrics
+			if serverLyrics != "" {
+				st.status = fmt.Sprintf("Bereits auf LRCLIB vorhanden (ID %d) – LRCLIB-Lyrics im Tab verfügbar.", record.ID)
 			} else {
 				st.status = fmt.Sprintf("Bereits auf LRCLIB vorhanden (ID %d).", record.ID)
 			}
@@ -916,6 +967,7 @@ func (a *App) applyCheckOutcome(st *trackState, record *lrclib.Record, err error
 			st.importance = widget.SuccessImportance
 		} else {
 			st.exists = false
+			st.serverLyrics = ""
 			if record.Instrumental {
 				st.status = fmt.Sprintf("Auf LRCLIB als instrumental markiert (ID %d) – Upload möglich.", record.ID)
 			} else {
@@ -996,6 +1048,11 @@ func (a *App) applyUploadOutcome(st *trackState, outcome uploadOutcome, record *
 		st.checked = true
 		st.exists = true
 		st.forceUpload = false
+		if st.instrumentalUpload {
+			st.serverLyrics = ""
+		} else {
+			st.serverLyrics = st.lyrics
+		}
 		if record != nil {
 			st.recordID = record.ID
 		}
@@ -1014,6 +1071,7 @@ func (a *App) applyUploadOutcome(st *trackState, outcome uploadOutcome, record *
 		st.checked = true
 		st.exists = true
 		if record != nil {
+			st.serverLyrics, _ = limitLyricsText(lyricsFromRecord(record))
 			st.recordID = record.ID
 			st.status = fmt.Sprintf("Bereits auf LRCLIB vorhanden (ID %d) – nichts hochgeladen.", record.ID)
 		} else {
@@ -1308,6 +1366,9 @@ func (a *App) updateDetail() {
 		a.detailLyrics.SetText(st.lyrics)
 		a.updatingLyrics = false
 	}
+	if a.detailServerLyrics.Text != st.serverLyrics {
+		a.detailServerLyrics.SetText(st.serverLyrics)
+	}
 	if a.detailInstrumental.Checked != st.instrumentalUpload {
 		a.detailInstrumental.SetChecked(st.instrumentalUpload)
 	}
@@ -1326,6 +1387,9 @@ func (a *App) clearDetail() {
 		a.updatingLyrics = true
 		a.detailLyrics.SetText("")
 		a.updatingLyrics = false
+	}
+	if a.detailServerLyrics.Text != "" {
+		a.detailServerLyrics.SetText("")
 	}
 	if a.detailInstrumental.Checked {
 		a.detailInstrumental.SetChecked(false)
@@ -1381,6 +1445,19 @@ func (a *App) refreshDetailControls() {
 	} else {
 		a.detailLyrics.Enable()
 	}
+	a.updateServerLyricsTheme(st.instrumentalUpload)
+}
+
+func (a *App) updateServerLyricsTheme(dimmed bool) {
+	if a.detailServerTab == nil || a.serverLyricsDimmed == dimmed {
+		return
+	}
+	a.serverLyricsDimmed = dimmed
+	a.detailServerTab.Theme = readOnlyLyricsTheme{
+		Theme:  fyne.CurrentApp().Settings().Theme(),
+		dimmed: dimmed,
+	}
+	a.detailServerTab.Refresh()
 }
 
 func newTrackListItem() fyne.CanvasObject {

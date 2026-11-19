@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"image/color"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/test"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
 	"lyrunderground/internal/library"
@@ -88,7 +90,7 @@ func TestTrackListAndDetailRenderTags(t *testing.T) {
 	}
 }
 
-func TestApplyCheckOutcomeLoadsServerLyrics(t *testing.T) {
+func TestApplyCheckOutcomeLoadsServerLyricsIntoTab(t *testing.T) {
 	a := &App{}
 	st := newTrackState(library.Track{Artist: "Artist", Title: "Title", Duration: 100 * time.Second})
 	synced := "[00:01.00]Server-Zeile"
@@ -99,8 +101,11 @@ func TestApplyCheckOutcomeLoadsServerLyrics(t *testing.T) {
 		SyncedLyrics: &synced,
 	}, nil)
 
-	if st.lyrics != synced {
-		t.Fatalf("lyrics = %q, want synced server lyrics", st.lyrics)
+	if st.serverLyrics != synced {
+		t.Fatalf("serverLyrics = %q, want synced server lyrics", st.serverLyrics)
+	}
+	if st.lyrics != "" {
+		t.Fatalf("local lyrics were filled from LRCLIB: %q", st.lyrics)
 	}
 	if !st.checked || !st.exists {
 		t.Fatalf("state not marked as present: checked=%v exists=%v", st.checked, st.exists)
@@ -364,5 +369,109 @@ func TestForcedUploadPublishesOverExistingLyrics(t *testing.T) {
 	}
 	if !published {
 		t.Fatal("forced upload must publish over existing lyrics")
+	}
+}
+
+func TestLyricsTabsKeepSourcesSeparateAndCached(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	win := test.NewWindow(nil)
+	win.Resize(fyne.NewSize(1200, 800))
+	a := New(win)
+	a.autoCheck = false
+
+	st := newTrackState(library.Track{
+		Artist: "Artist", Title: "Title", Duration: 100 * time.Second,
+		Lyrics: "Local lyrics",
+	})
+	a.tracks = []*trackState{st}
+	a.selected = 0
+	serverLyrics := "Server lyrics"
+	a.applyCheckOutcome(st, &lrclib.Record{
+		ID:          42,
+		PlainLyrics: &serverLyrics,
+	}, nil)
+	a.updateDetail()
+
+	if st.lyrics != "Local lyrics" {
+		t.Fatalf("local lyrics were overwritten: %q", st.lyrics)
+	}
+	if a.detailLyrics.Text != "Local lyrics" {
+		t.Fatalf("tag field = %q, want local lyrics", a.detailLyrics.Text)
+	}
+	if a.detailServerLyrics.Text != "Server lyrics" {
+		t.Fatalf("LRCLIB field = %q, want server lyrics", a.detailServerLyrics.Text)
+	}
+	if !a.detailServerLyrics.Disabled() {
+		t.Fatal("LRCLIB lyrics field must be read-only")
+	}
+
+	a.detailTabs.SelectIndex(1)
+	if a.detailServerLyrics.Text != "Server lyrics" {
+		t.Fatalf("LRCLIB field lost content after tab switch: %q", a.detailServerLyrics.Text)
+	}
+	a.detailTabs.SelectIndex(0)
+	if a.detailLyrics.Text != "Local lyrics" {
+		t.Fatalf("tag field lost content after tab switch: %q", a.detailLyrics.Text)
+	}
+
+	a.detailLyrics.SetText("Edited local lyrics")
+	if st.lyrics != "Edited local lyrics" {
+		t.Fatalf("local edit was not cached in state: %q", st.lyrics)
+	}
+	if a.detailServerLyrics.Text != "Server lyrics" {
+		t.Fatalf("editing tag lyrics changed LRCLIB field: %q", a.detailServerLyrics.Text)
+	}
+	a.detailTabs.SelectIndex(1)
+	a.detailTabs.SelectIndex(0)
+	if a.detailLyrics.Text != "Edited local lyrics" {
+		t.Fatalf("tag field lost edit after tab switch: %q", a.detailLyrics.Text)
+	}
+}
+
+func TestReadOnlyLyricsThemeBrightensDisabledText(t *testing.T) {
+	base := theme.DarkTheme()
+	disabled := color.NRGBAModel.Convert(base.Color(theme.ColorNameDisabled, theme.VariantDark)).(color.NRGBA)
+	got := color.NRGBAModel.Convert(readOnlyLyricsTheme{Theme: base}.Color(theme.ColorNameDisabled, theme.VariantDark)).(color.NRGBA)
+	if got.R <= disabled.R || got.G <= disabled.G || got.B <= disabled.B {
+		t.Fatalf("disabled text was not brightened: got %v, base %v", got, disabled)
+	}
+}
+
+func TestReadOnlyLyricsThemeDimmedMatchesTag(t *testing.T) {
+	base := theme.DarkTheme()
+	want := color.NRGBAModel.Convert(base.Color(theme.ColorNameDisabled, theme.VariantDark)).(color.NRGBA)
+	got := color.NRGBAModel.Convert(readOnlyLyricsTheme{Theme: base, dimmed: true}.Color(theme.ColorNameDisabled, theme.VariantDark)).(color.NRGBA)
+	if got != want {
+		t.Fatalf("dimmed text color = %v, want %v", got, want)
+	}
+}
+
+func TestInstrumentalSelectionDimsServerLyrics(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	win := test.NewWindow(nil)
+	win.Resize(fyne.NewSize(1200, 800))
+	a := New(win)
+	a.autoCheck = false
+
+	st := newTrackState(library.Track{
+		Artist: "Artist", Title: "Title", Duration: 100 * time.Second,
+		Lyrics: "Local lyrics",
+	})
+	a.tracks = []*trackState{st}
+	a.selected = 0
+	a.updateDetail()
+	if a.serverLyricsDimmed {
+		t.Fatal("server lyrics must use the brighter read-only color by default")
+	}
+
+	st.instrumentalUpload = true
+	a.updateDetail()
+	if !a.serverLyricsDimmed {
+		t.Fatal("server lyrics must be dimmed for instrumental uploads")
+	}
+	if !a.detailLyrics.Disabled() {
+		t.Fatal("tag lyrics must be disabled for instrumental uploads")
 	}
 }
