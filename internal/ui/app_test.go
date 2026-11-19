@@ -475,3 +475,105 @@ func TestInstrumentalSelectionDimsServerLyrics(t *testing.T) {
 		t.Fatal("tag lyrics must be disabled for instrumental uploads")
 	}
 }
+
+func TestUploadLyricsUseTagFieldWhenLRCLIBTabIsActive(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	win := test.NewWindow(nil)
+	win.Resize(fyne.NewSize(1200, 800))
+	a := New(win)
+	a.autoCheck = false
+
+	st := newTrackState(library.Track{
+		Artist: "Artist", Title: "Title", Duration: 100 * time.Second,
+		Lyrics: "Tag lyrics",
+	})
+	st.serverLyrics = "LRCLIB lyrics"
+	a.tracks = []*trackState{st}
+	a.selected = 0
+	a.updateDetail()
+
+	a.detailTabs.SelectIndex(1)
+	if got := lyricsForUpload(st); got != "Tag lyrics" {
+		t.Fatalf("upload lyrics = %q, want tag lyrics while LRCLIB tab is active", got)
+	}
+
+	a.detailTabs.SelectIndex(0)
+	if got := lyricsForUpload(st); got != "Tag lyrics" {
+		t.Fatalf("upload lyrics = %q, want tag lyrics while tag tab is active", got)
+	}
+}
+
+func TestCopyServerLyricsButton(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	win := test.NewWindow(nil)
+	win.Resize(fyne.NewSize(1200, 800))
+	a := New(win)
+	a.autoCheck = false
+
+	st := newTrackState(library.Track{
+		Artist: "Artist", Title: "Title", Duration: 100 * time.Second,
+		Lyrics: "Tag lyrics",
+	})
+	st.serverLyrics = "LRCLIB lyrics"
+	a.tracks = []*trackState{st}
+	a.selected = 0
+	a.updateDetail()
+
+	test.Tap(a.copyServerLyricsBtn)
+	if got := app.Clipboard().Content(); got != "LRCLIB lyrics" {
+		t.Fatalf("clipboard = %q, want LRCLIB lyrics", got)
+	}
+}
+
+func TestCopyServerLyricsButtonDisabledWithoutServerLyrics(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	win := test.NewWindow(nil)
+	win.Resize(fyne.NewSize(1200, 800))
+	a := New(win)
+	a.autoCheck = false
+
+	st := newTrackState(library.Track{
+		Artist: "Artist", Title: "Title", Duration: 100 * time.Second,
+		Lyrics: "Tag lyrics",
+	})
+	a.tracks = []*trackState{st}
+	a.selected = 0
+	a.updateDetail()
+
+	if !a.copyServerLyricsBtn.Disabled() {
+		t.Fatal("copy button must be disabled without LRCLIB lyrics")
+	}
+}
+
+func TestLyricsChangedLabel(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	win := test.NewWindow(nil)
+	win.Resize(fyne.NewSize(1200, 800))
+	a := New(win)
+	a.autoCheck = false
+
+	st := newTrackState(library.Track{
+		Artist: "Artist", Title: "Title", Duration: 100 * time.Second,
+		Lyrics: "Original lyrics",
+	})
+	a.tracks = []*trackState{st}
+	a.selected = 0
+	a.updateDetail()
+	if a.lyricsChangedLabel.Visible() {
+		t.Fatal("changed label must be hidden for unchanged tag lyrics")
+	}
+
+	a.detailLyrics.SetText("Changed lyrics")
+	if !a.lyricsChangedLabel.Visible() {
+		t.Fatal("changed label must be visible after editing tag lyrics")
+	}
+
+	a.detailLyrics.SetText("Original lyrics")
+	if a.lyricsChangedLabel.Visible() {
+		t.Fatal("changed label must be hidden after restoring the original lyrics")
+	}
+}

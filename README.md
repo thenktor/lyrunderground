@@ -19,9 +19,11 @@ audio files and uploads lyrics to [LRCLIB](https://lrclib.net).
 - For the selected file, the detail pane shows artist, title, album, duration,
   format, filename, and the status of the embedded lyrics tag.
 - Two lyrics tabs for the selected file: an editable **Tag** tab and a
-  read-only **LRCLIB** tab. Existing tag lyrics are filled in automatically.
-  Both sources are cached per track, so switching tabs does not lose content.
-  The editable field is limited to 256 KiB.
+  read-only **LRCLIB** tab. The **Lyrics:** row includes a **Copy** button for
+  the LRCLIB text and a yellow **Lyrics geändert** marker when the tag lyrics
+  differ from the file. Existing tag lyrics are filled in automatically. Both
+  sources are cached per track, so switching tabs does not lose content. The
+  editable field is limited to 256 KiB.
 - Per selected file:
   - **Check** queries LRCLIB for existing lyrics. Existing server lyrics are
     shown in the read-only **LRCLIB** tab without overwriting the tag lyrics.

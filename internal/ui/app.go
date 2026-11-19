@@ -13,8 +13,10 @@ import (
 	"unicode/utf8"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -24,9 +26,10 @@ import (
 )
 
 type trackState struct {
-	info         library.Track
-	lyrics       string
-	serverLyrics string
+	info           library.Track
+	lyrics         string
+	originalLyrics string
+	serverLyrics   string
 
 	status     string
 	importance widget.Importance
@@ -55,6 +58,8 @@ const lyricsAvailabilityNote = "Es kann bis zu 24 Stunden dauern, bis die Lyrics
 const maxLyricsBytes = 256 * 1024
 
 const readOnlyLyricsForegroundMix = 0.65
+
+var changedLyricsColor = color.NRGBA{R: 0xF2, G: 0xC9, B: 0x4C, A: 0xFF}
 
 type readOnlyLyricsTheme struct {
 	fyne.Theme
@@ -117,18 +122,20 @@ type App struct {
 	tracks     []*trackState
 	selected   int
 
-	detailTags         *widget.Label
-	detailStatus       *widget.Label
-	detailLyrics       *widget.Entry
-	detailServerLyrics *widget.Entry
-	detailServerTab    *container.ThemeOverride
-	detailTabs         *container.AppTabs
-	serverLyricsDimmed bool
-	detailInstrumental *widget.Check
-	detailForceUpload  *widget.Check
-	updatingLyrics     bool
-	detailCheck        *widget.Button
-	detailUpload       *widget.Button
+	detailTags          *widget.Label
+	detailStatus        *widget.Label
+	detailLyrics        *widget.Entry
+	detailServerLyrics  *widget.Entry
+	detailServerTab     *container.ThemeOverride
+	detailTabs          *container.AppTabs
+	copyServerLyricsBtn *widget.Button
+	lyricsChangedLabel  *canvas.Text
+	serverLyricsDimmed  bool
+	detailInstrumental  *widget.Check
+	detailForceUpload   *widget.Check
+	updatingLyrics      bool
+	detailCheck         *widget.Button
+	detailUpload        *widget.Button
 
 	scanRunning bool
 	scanCancel  context.CancelFunc
@@ -206,12 +213,19 @@ func New(win fyne.Window) *App {
 			text = limited
 		}
 		a.tracks[a.selected].lyrics = text
+		a.updateLyricsChangedLabel(a.tracks[a.selected])
 		a.refreshDetailControls()
 	}
 
 	a.detailServerLyrics = widget.NewMultiLineEntry()
 	a.detailServerLyrics.SetPlaceHolder("Noch keine LRCLIB-Lyrics geladen.")
 	a.detailServerLyrics.Wrapping = fyne.TextWrapWord
+
+	a.copyServerLyricsBtn = widget.NewButtonWithIcon("Kopieren", theme.ContentCopyIcon(), a.copyServerLyrics)
+	a.copyServerLyricsBtn.Disable()
+	a.lyricsChangedLabel = canvas.NewText("Lyrics geändert", changedLyricsColor)
+	a.lyricsChangedLabel.TextSize = theme.TextSize()
+	a.lyricsChangedLabel.Hide()
 	a.detailServerLyrics.Disable()
 
 	a.detailServerTab = container.NewThemeOverride(
@@ -268,11 +282,18 @@ func New(win fyne.Window) *App {
 	)
 	left := container.NewBorder(a.listHeader, listFooter, nil, nil, a.list)
 
+	lyricsRow := container.NewHBox(
+		widget.NewLabel("Lyrics:"),
+		a.detailInstrumental,
+		layout.NewSpacer(),
+		a.lyricsChangedLabel,
+		a.copyServerLyricsBtn,
+	)
 	detailTop := container.NewVBox(
 		a.detailTags,
 		a.detailStatus,
 		widget.NewSeparator(),
-		container.NewHBox(widget.NewLabel("Lyrics:"), a.detailInstrumental),
+		lyricsRow,
 	)
 	detailButtons := container.NewHBox(a.detailCheck, a.detailUpload, a.detailForceUpload)
 	detail := container.NewBorder(detailTop, detailButtons, nil, nil, a.detailTabs)
@@ -836,7 +857,7 @@ func (a *App) uploadOne(index int) {
 		a.refreshTrack(index)
 		return
 	}
-	lyrics := strings.TrimSpace(st.lyrics)
+	lyrics := lyricsForUpload(st)
 	if lyrics == "" && !st.instrumentalUpload {
 		st.status = "Keine Lyrics eingegeben – Upload nicht möglich (oder „Instrumental“ aktivieren)."
 		st.importance = widget.DangerImportance
@@ -897,6 +918,30 @@ func (a *App) setMissingMetadataError(index int) {
 	st.status = "Upload nicht möglich – fehlende Angaben: " + strings.Join(missing, ", ")
 	st.importance = widget.DangerImportance
 	a.refreshTrack(index)
+}
+
+// lyricsForUpload always uses the editable tag field. The LRCLIB tab is a
+// read-only reference and must never become the upload source implicitly.
+func lyricsForUpload(st *trackState) string {
+	return strings.TrimSpace(st.lyrics)
+}
+
+func sameLyricsText(a, b string) bool {
+	normalize := func(s string) string {
+		s = strings.ReplaceAll(s, "\r\n", "\n")
+		s = strings.ReplaceAll(s, "\r", "\n")
+		return strings.TrimSpace(s)
+	}
+	return normalize(a) == normalize(b)
+}
+
+func (a *App) updateLyricsChangedLabel(st *trackState) {
+	if sameLyricsText(st.lyrics, st.originalLyrics) {
+		a.lyricsChangedLabel.Hide()
+	} else {
+		a.lyricsChangedLabel.Show()
+	}
+	a.lyricsChangedLabel.Refresh()
 }
 
 func lyricsFromRecord(record *lrclib.Record) string {
@@ -1106,7 +1151,7 @@ func (a *App) startBulkFor(indices []int, upload bool) {
 		jobs = append(jobs, bulkJob{
 			index:        index,
 			info:         st.info,
-			lyrics:       strings.TrimSpace(st.lyrics),
+			lyrics:       lyricsForUpload(st),
 			required:     st.info.HasRequiredMetadata(),
 			instrumental: st.instrumentalUpload,
 			forceUpload:  st.forceUpload,
@@ -1311,8 +1356,9 @@ func (a *App) runBulk(ctx context.Context, jobs []bulkJob, upload bool) {
 func newTrackState(track library.Track) *trackState {
 	lyrics, truncated := limitLyricsText(track.Lyrics)
 	st := &trackState{
-		info:   track,
-		lyrics: lyrics,
+		info:           track,
+		lyrics:         lyrics,
+		originalLyrics: lyrics,
 	}
 	switch {
 	case !track.HasRequiredMetadata():
@@ -1369,6 +1415,12 @@ func (a *App) updateDetail() {
 	if a.detailServerLyrics.Text != st.serverLyrics {
 		a.detailServerLyrics.SetText(st.serverLyrics)
 	}
+	if strings.TrimSpace(st.serverLyrics) == "" {
+		a.copyServerLyricsBtn.Disable()
+	} else {
+		a.copyServerLyricsBtn.Enable()
+	}
+	a.updateLyricsChangedLabel(st)
 	if a.detailInstrumental.Checked != st.instrumentalUpload {
 		a.detailInstrumental.SetChecked(st.instrumentalUpload)
 	}
@@ -1376,6 +1428,15 @@ func (a *App) updateDetail() {
 		a.detailForceUpload.SetChecked(st.forceUpload)
 	}
 	a.refreshDetailControls()
+}
+
+func (a *App) copyServerLyrics() {
+	text := a.detailServerLyrics.Text
+	if strings.TrimSpace(text) == "" {
+		return
+	}
+	fyne.CurrentApp().Clipboard().SetContent(text)
+	a.setGlobalStatus("LRCLIB-Lyrics in die Zwischenablage kopiert.", widget.SuccessImportance)
 }
 
 func (a *App) clearDetail() {
@@ -1391,6 +1452,8 @@ func (a *App) clearDetail() {
 	if a.detailServerLyrics.Text != "" {
 		a.detailServerLyrics.SetText("")
 	}
+	a.copyServerLyricsBtn.Disable()
+	a.lyricsChangedLabel.Hide()
 	if a.detailInstrumental.Checked {
 		a.detailInstrumental.SetChecked(false)
 	}
