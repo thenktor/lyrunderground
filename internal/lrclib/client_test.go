@@ -270,3 +270,39 @@ func TestNetworkErrorDoesNotRetryPublish(t *testing.T) {
 		t.Fatalf("failing POST was sent %d times, want 1", got)
 	}
 }
+
+func TestPublishAlwaysSendsAlbumName(t *testing.T) {
+	var raw map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/request-challenge":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"prefix":"abc123","target":"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"}`)
+		case "/api/publish":
+			if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+				t.Errorf("decode payload: %v", err)
+			}
+			w.WriteHeader(http.StatusCreated)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	// LRCLIB deserialises albumName into a required string field, so omitting
+	// it for tracks without an album tag would break the upload.
+	err := testClient(server).Publish(context.Background(), PublishRequest{
+		TrackInfo: TrackInfo{ArtistName: "Künstler", TrackName: "Titel", Duration: 100 * time.Second},
+		Lyrics:    "Zeile",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	album, ok := raw["albumName"]
+	if !ok {
+		t.Fatal("publish payload must always contain albumName")
+	}
+	if album != "" {
+		t.Fatalf("albumName = %v, want an empty string", album)
+	}
+}

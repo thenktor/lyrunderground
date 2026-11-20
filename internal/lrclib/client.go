@@ -25,7 +25,10 @@ const (
 	DefaultBaseURL = "https://lrclib.net"
 	UserAgent      = appinfo.NAME + " v0.1.0 (https://github.com/thomue/" + appinfo.NAME + ")"
 
-	defaultMinRequestInterval = 350 * time.Millisecond
+	// LRCLIB allows roughly 90 requests per minute for clients that identify
+	// themselves, i.e. about one request every 650 ms. Stay slightly below that
+	// so a full album scan does not run into 429 responses.
+	defaultMinRequestInterval = 700 * time.Millisecond
 	defaultMaxRetries         = 3
 )
 
@@ -221,8 +224,11 @@ func (c *Client) Publish(ctx context.Context, req PublishRequest) error {
 }
 
 type publishPayload struct {
-	TrackName    string  `json:"trackName"`
-	ArtistName   string  `json:"artistName"`
+	TrackName  string `json:"trackName"`
+	ArtistName string `json:"artistName"`
+	// AlbumName is required by the API even when the tag has no album: the
+	// server deserialises it into a plain string and rejects a missing field.
+	// Do not add omitempty here; an empty string is accepted.
 	AlbumName    string  `json:"albumName"`
 	Duration     float64 `json:"duration"`
 	PlainLyrics  *string `json:"plainLyrics,omitempty"`

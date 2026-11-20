@@ -11,7 +11,8 @@ import (
 )
 
 func TestSolveChallenge(t *testing.T) {
-	// About one in 256 nonces fulfills this target, so the test stays fast.
+	// 0x0F... leaves 15 of 256 hash values valid (about one in 17), so the
+	// test stays fast.
 	target := "0F" + strings.Repeat("FF", 31)
 	nonce, err := SolveChallenge(context.Background(), "prefix", target)
 	if err != nil {

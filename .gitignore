@@ -3,7 +3,6 @@ bin/
 package/
 tmp/
 *.pfx
-*.txt
 icon.ico
 Icon.png
 rsrc_windows_amd64.syso

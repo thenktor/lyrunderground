@@ -130,15 +130,18 @@ build has no Windows toolchain.
    another scan.
 
 Missing required fields (artist, title, or duration) are shown per track; check
-and upload are disabled for those files. The album name is sent when it is
-present in the tags.
+and upload are disabled for those files. The album name is always sent, as an
+empty string when the tags have no album: LRCLIB requires the field in the
+publish payload.
 
 ## LRCLIB notes
 
 - The application identifies itself with its own `User-Agent`. The name is
   defined in `internal/appinfo/appinfo.go` and used in
   `internal/lrclib/client.go`; adjust it for custom builds.
-- Requests are sent sequentially with at least 350 ms between them.
+- Requests are sent sequentially with at least 700 ms between them, which keeps
+  a full album scan below the roughly 90 requests per minute that LRCLIB
+  grants to clients identifying themselves via `User-Agent`.
 - On `429 Too Many Requests` or `503 Service Unavailable`, the `Retry-After`
   header is honored and the request is retried if necessary.
 - During upload, a challenge is requested first, and a publish token is

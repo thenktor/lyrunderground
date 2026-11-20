@@ -1158,14 +1158,19 @@ func (a *App) startBulkFor(indices []int, upload bool) {
 			continue
 		}
 		st := a.tracks[index]
-		jobs = append(jobs, bulkJob{
+		job := bulkJob{
 			index:        index,
 			info:         st.info,
-			lyrics:       lyricsForUpload(st),
 			required:     st.info.HasRequiredMetadata(),
 			instrumental: st.instrumentalUpload,
 			forceUpload:  st.forceUpload,
-		})
+		}
+		if upload {
+			// Only an upload needs the lyrics text. A check-only run must not
+			// keep a copy of every track's lyrics in memory.
+			job.lyrics = lyricsForUpload(st)
+		}
+		jobs = append(jobs, job)
 	}
 	if len(jobs) == 0 {
 		return

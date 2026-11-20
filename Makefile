@@ -1,10 +1,8 @@
 NAME := lyrunderground
 APP_NAME := LyricsFromTheUnderground
 
-SRCS := $(shell find . -type f -name '*.go' | sort)
-CSVS := $(wildcard *.csv)
-
-FILES_DARWIN := $(wildcard scripts/*-macos.sh)
+# Test files are excluded: they do not affect the binaries.
+SRCS := $(shell find . -type f -name '*.go' ! -name '*_test.go' | sort)
 
 BUILDINFO := codeberg.org/unixery/buildinfo
 RSRC := $(shell command -v rsrc 2>/dev/null)
