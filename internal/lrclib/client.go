@@ -62,13 +62,17 @@ type Record struct {
 	Lyricsfile   string  `json:"lyricsfile"`
 }
 
-// HasLyrics reports whether the record contains actual lyrics. Tracks that are
-// marked as instrumental or only exist as an empty metadata record return false.
+// HasLyrics reports whether the record contains actual lyrics text. Tracks that
+// are marked as instrumental or only exist as a metadata record return false.
+//
+// Lyricsfile is deliberately not considered: LRCLIB attaches a (possibly empty)
+// lyricsfile to every record, so checking it would report lyrics for any track
+// that merely exists.
 func (r *Record) HasLyrics() bool {
 	if r == nil || r.Instrumental {
 		return false
 	}
-	return nonEmpty(r.PlainLyrics) || nonEmpty(r.SyncedLyrics) || strings.TrimSpace(r.Lyricsfile) != ""
+	return nonEmpty(r.PlainLyrics) || nonEmpty(r.SyncedLyrics)
 }
 
 func nonEmpty(s *string) bool {
@@ -188,16 +192,6 @@ func (c *Client) Publish(ctx context.Context, req PublishRequest) error {
 		return errors.New("Artist und Titel werden für den Upload benötigt")
 	}
 
-	challenge, err := c.requestChallenge(ctx)
-	if err != nil {
-		return err
-	}
-	nonce, err := SolveChallenge(ctx, challenge.Prefix, challenge.Target)
-	if err != nil {
-		return fmt.Errorf("Proof-of-Work konnte nicht gelöst werden: %w", err)
-	}
-	token := challenge.Prefix + ":" + nonce
-
 	payload := publishPayload{
 		TrackName:  req.TrackName,
 		ArtistName: req.ArtistName,
@@ -216,15 +210,41 @@ func (c *Client) Publish(ctx context.Context, req PublishRequest) error {
 		return err
 	}
 
-	headers := map[string]string{"X-Publish-Token": token}
-	body, status, err := c.do(ctx, http.MethodPost, "/api/publish", nil, data, headers)
-	if err != nil {
-		return err
+	// A challenge expires after five minutes and every publish token can only be
+	// used once. If the token is rejected, the request was not applied, so solve
+	// a fresh challenge once before giving up.
+	for attempt := 0; ; attempt++ {
+		challenge, err := c.requestChallenge(ctx)
+		if err != nil {
+			return err
+		}
+		nonce, err := SolveChallenge(ctx, challenge.Prefix, challenge.Target)
+		if err != nil {
+			return fmt.Errorf("Proof-of-Work konnte nicht gelöst werden: %w", err)
+		}
+
+		headers := map[string]string{"X-Publish-Token": challenge.Prefix + ":" + nonce}
+		body, status, err := c.do(ctx, http.MethodPost, "/api/publish", nil, data, headers)
+		if err != nil {
+			return err
+		}
+		if status >= 200 && status < 300 {
+			return nil
+		}
+
+		apiErr := parseAPIError(status, body)
+		if attempt == 0 && isInvalidPublishToken(apiErr) {
+			continue
+		}
+		return apiErr
 	}
-	if status < 200 || status >= 300 {
-		return parseAPIError(status, body)
-	}
-	return nil
+}
+
+// isInvalidPublishToken reports whether LRCLIB rejected the publish token, for
+// example because the challenge expired or the token was already consumed.
+func isInvalidPublishToken(err error) bool {
+	var apiErr *APIError
+	return errors.As(err, &apiErr) && apiErr.Name == "IncorrectPublishTokenError"
 }
 
 type publishPayload struct {

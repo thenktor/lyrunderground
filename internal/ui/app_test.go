@@ -626,3 +626,33 @@ func TestUploadClearsLyricsChangedMarker(t *testing.T) {
 		t.Fatalf("originalLyrics = %q, want the uploaded text", st.originalLyrics)
 	}
 }
+
+func TestCancelCurrentCancelsSingleRowOperation(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	win := test.NewWindow(nil)
+	win.Resize(fyne.NewSize(1200, 800))
+	a := New(win)
+	a.autoCheck = false
+
+	st := newTrackState(library.Track{Artist: "Artist", Title: "Title", Duration: 100 * time.Second})
+	a.tracks = []*trackState{st}
+	a.selected = 0
+	st.busy = true
+	a.updateControls()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	a.beginRowOp(0, cancel)
+
+	if a.cancelBtn.Disabled() {
+		t.Fatal("cancel button must be enabled while a single-track operation runs")
+	}
+
+	a.cancelCurrent()
+
+	select {
+	case <-ctx.Done():
+	default:
+		t.Fatal("cancel did not stop the single-track operation")
+	}
+}

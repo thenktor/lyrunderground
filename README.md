@@ -142,7 +142,8 @@ build has no Windows toolchain.
 4. **Upload** becomes available only once LRCLIB has no lyrics for the selected
    file. Alternatively, use **Upload all** for the entire list.
 5. **Clear list** removes all entries; the folder path remains available for
-   another scan.
+   another scan. **Cancel** stops a running folder scan, a bulk run, or a single
+   check/upload (including the proof of work).
 
 Missing required fields (artist, title, or duration) are shown per track; check
 and upload are disabled for those files. The album name is always sent, as an

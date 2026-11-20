@@ -321,3 +321,91 @@ func TestUserAgentFollowsBuildVersion(t *testing.T) {
 		t.Fatalf("UserAgent %q has no project link or e-mail address", UserAgent)
 	}
 }
+
+func TestHasLyricsIgnoresLyricsfile(t *testing.T) {
+	// LRCLIB attaches a lyricsfile to every record, so a record with only that
+	// field must not count as "has lyrics".
+	record := &Record{ID: 1, Lyricsfile: "track:\n  title: T\n"}
+	if record.HasLyrics() {
+		t.Fatal("record without plain or synced lyrics must not report lyrics")
+	}
+
+	plain := "Zeile"
+	record = &Record{ID: 1, PlainLyrics: &plain, Lyricsfile: "track:\n  title: T\n"}
+	if !record.HasLyrics() {
+		t.Fatal("record with plain lyrics must report lyrics")
+	}
+
+	instrumental := &Record{ID: 1, Instrumental: true, Lyricsfile: "track:\n  title: T\n"}
+	if instrumental.HasLyrics() {
+		t.Fatal("instrumental record must not report lyrics")
+	}
+}
+
+func TestPublishRetriesWithFreshChallenge(t *testing.T) {
+	var challenges, publishes int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/request-challenge":
+			challenges++
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"prefix":"abc123","target":"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"}`)
+		case "/api/publish":
+			publishes++
+			if publishes == 1 {
+				// Expired challenge / already used token.
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = io.WriteString(w, `{"message":"The provided publish token is incorrect","name":"IncorrectPublishTokenError","statusCode":400}`)
+				return
+			}
+			w.WriteHeader(http.StatusCreated)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	err := testClient(server).Publish(context.Background(), PublishRequest{
+		TrackInfo: TrackInfo{ArtistName: "Künstler", TrackName: "Titel", Duration: 100 * time.Second},
+		Lyrics:    "Zeile",
+	})
+	if err != nil {
+		t.Fatalf("publish did not recover from an expired token: %v", err)
+	}
+	if publishes != 2 {
+		t.Fatalf("publish was sent %d times, want 2", publishes)
+	}
+	if challenges != 2 {
+		t.Fatalf("requested %d challenges, want 2 (one per attempt)", challenges)
+	}
+}
+
+func TestPublishGivesUpAfterOneTokenRetry(t *testing.T) {
+	var challenges, publishes int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/request-challenge":
+			challenges++
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"prefix":"abc123","target":"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"}`)
+		case "/api/publish":
+			publishes++
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = io.WriteString(w, `{"message":"The provided publish token is incorrect","name":"IncorrectPublishTokenError","statusCode":400}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	err := testClient(server).Publish(context.Background(), PublishRequest{
+		TrackInfo: TrackInfo{ArtistName: "Künstler", TrackName: "Titel", Duration: 100 * time.Second},
+		Lyrics:    "Zeile",
+	})
+	if err == nil {
+		t.Fatal("expected an error when every token is rejected")
+	}
+	if publishes != 2 || challenges != 2 {
+		t.Fatalf("publishes=%d challenges=%d, want exactly one retry (2/2)", publishes, challenges)
+	}
+}

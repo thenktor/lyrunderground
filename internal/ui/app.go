@@ -142,6 +142,11 @@ type App struct {
 
 	bulkRunning bool
 	bulkCancel  context.CancelFunc
+
+	// opCancels holds the cancel functions of single-track checks and uploads.
+	// They run outside the scan/bulk runners, so they need their own handles to
+	// stay abortable. Keyed by track index and only touched on the main thread.
+	opCancels map[int]context.CancelFunc
 }
 
 // New builds the user interface for the given window.
@@ -151,6 +156,7 @@ func New(win fyne.Window) *App {
 		client:    lrclib.NewClient(),
 		autoCheck: true,
 		selected:  -1,
+		opCancels: make(map[int]context.CancelFunc),
 	}
 
 	a.folderEntry = widget.NewEntry()
@@ -740,9 +746,25 @@ func (a *App) cancelCurrent() {
 	if a.bulkCancel != nil {
 		a.bulkCancel()
 	}
-	if a.scanRunning || a.bulkRunning {
+	for _, cancel := range a.opCancels {
+		cancel()
+	}
+	if a.scanRunning || a.bulkRunning || len(a.opCancels) > 0 {
 		a.setGlobalStatus("Abbruch angefordert…", widget.WarningImportance)
 	}
+}
+
+// beginRowOp registers the cancel function of a single-track operation, so the
+// cancel button (and closing the window) can stop it.
+func (a *App) beginRowOp(index int, cancel context.CancelFunc) {
+	if a.opCancels == nil {
+		a.opCancels = make(map[int]context.CancelFunc)
+	}
+	a.opCancels[index] = cancel
+}
+
+func (a *App) endRowOp(index int) {
+	delete(a.opCancels, index)
 }
 
 func (a *App) setGlobalStatus(text string, importance widget.Importance) {
@@ -776,7 +798,9 @@ func (a *App) updateControls() {
 		a.clearBtn.Enable()
 	}
 
-	if globalBusy {
+	// Single-track checks and uploads can run for minutes as well, so the
+	// cancel button has to be available for them too.
+	if busy {
 		a.cancelBtn.Enable()
 	} else {
 		a.cancelBtn.Disable()
@@ -826,11 +850,14 @@ func (a *App) checkOne(index int) {
 	a.refreshTrack(index)
 	a.updateControls()
 
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	a.beginRowOp(index, cancel)
+
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 		record, err := a.client.Check(ctx, infoOf(info))
 		fyne.Do(func() {
+			a.endRowOp(index)
 			if !a.currentTrack(index, st) {
 				return
 			}
@@ -875,8 +902,10 @@ func (a *App) uploadOne(index int) {
 	a.refreshTrack(index)
 	a.updateControls()
 
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	a.beginRowOp(index, cancel)
+
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
 		defer cancel()
 
 		outcome, record, err := a.uploadCore(ctx, info, lyrics, synced, instrumental, force, func(message string) {
@@ -891,6 +920,7 @@ func (a *App) uploadOne(index int) {
 		})
 
 		fyne.Do(func() {
+			a.endRowOp(index)
 			if !a.currentTrack(index, st) {
 				return
 			}
