@@ -25,15 +25,8 @@ GIT_TAG := v0.0.0
 endif
 # optional: print warning warning on dirty working tree, append -dirty to commit id
 ifeq ($(GIT_DIRTY),true)
-$(warning Git working tree is dirty)
+#$(warning Git working tree is dirty)
 GIT_SHA := $(GIT_SHA)-dirty
-endif
-
-# Detect the operating system
-ifeq ($(OS),Windows_NT)
-	RSYNC = rsync.exe
-else
-	RSYNC = rsync
 endif
 
 # The binaries embed GIT_SHA/GIT_TAG via ldflags, but make only compares
@@ -89,6 +82,18 @@ ifneq (,$(or $(filter n/a,${APP_VERSION}),$(if ${APP_VERSION},,x)))
 APP_VERSION := 0.0.0
 endif
 
+# Monotonic build number for CFBundleVersion: the commit count only grows, which
+# is what macOS expects for bundle versions.
+APP_BUILD := $(shell git rev-list --count HEAD 2>/dev/null)
+ifeq (${APP_BUILD},)
+APP_BUILD := 1
+endif
+
+# Linker flags that embed the Git metadata. Every -X has to be a separate
+# "-ldflags=" field inside GOFLAGS (see GO_LDFLAGS below), because fyne reads
+# them from there and joins them again.
+GO_LDFLAGS := -ldflags=-X=${BUILDINFO}.GitSha=${GIT_SHA} -ldflags=-X=${BUILDINFO}.GitTag=${GIT_TAG}
+
 .PHONY: sign-darwin sign-windows
 sign-darwin:  bin/darwin-arm64/${NAME}-signed
 sign-windows: bin/windows-amd64/${NAME}-signed.exe
@@ -110,7 +115,8 @@ windows-cross: ${GIT_STATE} Icon.png
 	fyne-cross windows -arch amd64 \
 		-engine "$(FYNE_CROSS_ENGINE)" \
 		-name ${NAME} -icon Icon.png \
-		-app-id de.thomue.${NAME} -app-version ${APP_VERSION}
+		-app-id de.thomue.${NAME} \
+		-app-version ${APP_VERSION} -app-build ${APP_BUILD}
 	@mkdir -p bin/windows-amd64
 	mv fyne-cross/bin/windows-amd64/${NAME}.exe bin/windows-amd64/${NAME}.exe
 
@@ -127,11 +133,14 @@ run-darwin: darwin
 #
 # PACKAGING
 #
-package/darwin/$(APP_NAME).app: $(SRCS) Icon.png
+package/darwin/$(APP_NAME).app: $(SRCS) Icon.png ${GIT_STATE}
 	@mkdir -p package/darwin/
-	@echo "Packaging for darwin..."
+	@echo "Packaging for darwin ($(APP_NAME) $(APP_VERSION) build $(APP_BUILD))..."
 	@rm -rf package/darwin/$(APP_NAME).app
-	fyne package -os darwin -name $(APP_NAME) -release -use-raw-icon
+	@# `fyne package` calls `go build` without linker flags. It only picks them
+	@# up from GOFLAGS, so without this the bundle reports version "dev".
+	GOFLAGS="${GO_LDFLAGS}" fyne package -os darwin -name $(APP_NAME) -release -use-raw-icon \
+		-appVersion $(APP_VERSION) -appBuild $(APP_BUILD)
 	mv $(APP_NAME).app package/darwin/
 
 #

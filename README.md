@@ -92,6 +92,21 @@ bin/darwin/lyrunderground -version
 When building with the `Makefile`, the Git tag and commit SHA are embedded in
 the binary via `codeberg.org/unixery/buildinfo`.
 
+A macOS app bundle is built with:
+
+```bash
+make package/darwin/LyricsFromTheUnderground.app
+```
+
+The bundle metadata is derived from Git as well: `CFBundleShortVersionString`
+becomes the current tag (`v0.1.0` → `0.1.0`) and `CFBundleVersion` the commit
+count, which is monotonic as macOS requires. Both are passed to `fyne package`
+explicitly, because its defaults (`0.0.1` / `1`) ignore the repository.
+
+The binary inside the bundle gets the Git SHA and tag through `GOFLAGS`, since
+`fyne package` invokes `go build` without linker flags. Without that, the window
+title and `-version` would report `dev`.
+
 ### Windows binaries
 
 Fyne renders through OpenGL/GLFW and is therefore always built with cgo. A
