@@ -152,9 +152,11 @@ publish payload.
 
 ## LRCLIB notes
 
-- The application identifies itself with its own `User-Agent`. The name is
-  defined in `internal/appinfo/appinfo.go` and used in
-  `internal/lrclib/client.go`; adjust it for custom builds.
+- The application identifies itself with its own `User-Agent` of the form
+  `lyrunderground <version> (<homepage>)`, as requested by the API
+  documentation. Name, homepage and version come from
+  `internal/appinfo/appinfo.go` (the version from the linker metadata); adjust
+  `HOMEPAGE` for custom builds.
 - Requests are sent sequentially with at least 700 ms between them, which keeps
   a full album scan below the roughly 90 requests per minute that LRCLIB
   grants to clients identifying themselves via `User-Agent`.

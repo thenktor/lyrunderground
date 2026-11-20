@@ -9,6 +9,10 @@ const (
 
 	// NAME is used for technical identifiers such as the app ID and User-Agent.
 	NAME = "lyrunderground"
+
+	// HOMEPAGE is the project page reported to LRCLIB in the User-Agent, which
+	// the API documentation asks for.
+	HOMEPAGE = "https://github.com/thenktor/lyrunderground"
 )
 
 // Version returns the version from the linker metadata. Builds without

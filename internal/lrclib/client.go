@@ -24,7 +24,7 @@ import (
 // UserAgent identifies this client to LRCLIB. The API documentation asks for
 // the application name, its version and a link to the project or an e-mail
 // address, so the version must follow the build instead of being hard-coded.
-var UserAgent = appinfo.NAME + " " + appinfo.Version() + " (https://github.com/thomue/" + appinfo.NAME + ")"
+var UserAgent = appinfo.NAME + " " + appinfo.Version() + " (" + appinfo.HOMEPAGE + ")"
 
 const (
 	DefaultBaseURL = "https://lrclib.net"
