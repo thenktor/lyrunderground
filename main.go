@@ -18,21 +18,14 @@ func main() {
 	flag.Parse()
 
 	if *flagVersion {
-		fmt.Printf("%s %s (git sha %s)\n", appinfo.NAME, displayVersion(), buildinfo.GitSha)
+		fmt.Printf("%s %s (git sha %s)\n", appinfo.NAME, appinfo.Version(), buildinfo.GitSha)
 		return
 	}
-	fmt.Printf("%s %s\n", appinfo.NAME, displayVersion())
+	fmt.Printf("%s %s\n", appinfo.NAME, appinfo.Version())
 
-	a := app.NewWithID("de.thomue." + appinfo.NAME)
-	window := a.NewWindow(fmt.Sprintf("%s %s – LRCLIB Lyrics Uploader", appinfo.APP_NAME, displayVersion()))
+	a := app.NewWithID("de.unixery." + appinfo.NAME)
+	window := a.NewWindow(fmt.Sprintf("%s %s – LRCLIB Lyrics Uploader", appinfo.APP_NAME, appinfo.Version()))
 	window.Resize(fyne.NewSize(1180, 820))
 	ui.New(window)
 	window.ShowAndRun()
-}
-
-func displayVersion() string {
-	if buildinfo.GitTag == "" || buildinfo.GitTag == "n/a" {
-		return "dev"
-	}
-	return buildinfo.GitTag
 }

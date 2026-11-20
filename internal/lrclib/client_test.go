@@ -306,3 +306,18 @@ func TestPublishAlwaysSendsAlbumName(t *testing.T) {
 		t.Fatalf("albumName = %v, want an empty string", album)
 	}
 }
+
+func TestUserAgentFollowsBuildVersion(t *testing.T) {
+	// The default User-Agent must carry the build version instead of a
+	// hard-coded one, otherwise every release reports the wrong version to
+	// LRCLIB.
+	if !strings.Contains(UserAgent, appinfo.Version()) {
+		t.Fatalf("UserAgent %q does not contain the build version %q", UserAgent, appinfo.Version())
+	}
+	if !strings.HasPrefix(UserAgent, appinfo.NAME+" ") {
+		t.Fatalf("UserAgent %q does not start with the application name", UserAgent)
+	}
+	if !strings.Contains(UserAgent, "https://") && !strings.Contains(UserAgent, "@") {
+		t.Fatalf("UserAgent %q has no project link or e-mail address", UserAgent)
+	}
+}

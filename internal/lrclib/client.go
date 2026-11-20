@@ -21,9 +21,13 @@ import (
 	"lyrunderground/internal/appinfo"
 )
 
+// UserAgent identifies this client to LRCLIB. The API documentation asks for
+// the application name, its version and a link to the project or an e-mail
+// address, so the version must follow the build instead of being hard-coded.
+var UserAgent = appinfo.NAME + " " + appinfo.Version() + " (https://github.com/thomue/" + appinfo.NAME + ")"
+
 const (
 	DefaultBaseURL = "https://lrclib.net"
-	UserAgent      = appinfo.NAME + " v0.1.0 (https://github.com/thomue/" + appinfo.NAME + ")"
 
 	// LRCLIB allows roughly 90 requests per minute for clients that identify
 	// themselves, i.e. about one request every 650 ms. Stay slightly below that

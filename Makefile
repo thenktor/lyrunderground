@@ -116,7 +116,7 @@ windows-cross: ${GIT_STATE} Icon.png
 	fyne-cross windows -arch amd64 \
 		-engine "$(FYNE_CROSS_ENGINE)" \
 		-name ${NAME} -icon Icon.png \
-		-app-id de.thomue.${NAME} \
+		-app-id de.unixery.${NAME} \
 		-app-version ${APP_VERSION} -app-build ${APP_BUILD}
 	@mkdir -p bin/windows-amd64
 	mv fyne-cross/bin/windows-amd64/${NAME}.exe bin/windows-amd64/${NAME}.exe
@@ -140,8 +140,12 @@ package/darwin/$(APP_NAME).app: $(SRCS) Icon.png ${GIT_STATE}
 	@rm -rf package/darwin/$(APP_NAME).app
 	@# `fyne package` calls `go build` without linker flags. It only picks them
 	@# up from GOFLAGS, so without this the bundle reports version "dev".
-	GOFLAGS="${FYNE_GOFLAGS}" fyne package -os darwin -name $(APP_NAME) -release -use-raw-icon \
-		-appVersion $(APP_VERSION) -appBuild $(APP_BUILD)
+	GOFLAGS="${FYNE_GOFLAGS}" fyne package -os darwin \
+		-name $(APP_NAME) \
+		-app-id de.unixery.${NAME} \
+		-appVersion $(APP_VERSION) -appBuild $(APP_BUILD) \
+		-use-raw-icon \
+		-release
 	mv $(APP_NAME).app package/darwin/
 
 #
