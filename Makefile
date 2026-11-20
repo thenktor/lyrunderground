@@ -90,9 +90,10 @@ APP_BUILD := 1
 endif
 
 # Linker flags that embed the Git metadata. Every -X has to be a separate
-# "-ldflags=" field inside GOFLAGS (see GO_LDFLAGS below), because fyne reads
+# "-ldflags=" field inside GOFLAGS (see FYNE_GOFLAGS below), because fyne reads
 # them from there and joins them again.
-GO_LDFLAGS := -ldflags=-X=${BUILDINFO}.GitSha=${GIT_SHA} -ldflags=-X=${BUILDINFO}.GitTag=${GIT_TAG}
+GO_LDFLAGS := -X '${BUILDINFO}.GitSha=${GIT_SHA}' -X '${BUILDINFO}.GitTag=${GIT_TAG}' -s -w
+FYNE_GOFLAGS := -ldflags=-X=${BUILDINFO}.GitSha=${GIT_SHA} -ldflags=-X=${BUILDINFO}.GitTag=${GIT_TAG}
 
 .PHONY: sign-darwin sign-windows
 sign-darwin:  bin/darwin-arm64/${NAME}-signed
@@ -104,7 +105,7 @@ sign-windows: bin/windows-amd64/${NAME}-signed.exe
 bin/darwin-arm64/${NAME}: $(SRCS) ${GIT_STATE}
 	@mkdir -p bin/darwin-arm64/
 	@echo "Building darwin/arm64..."
-	env GOOS=darwin GOARCH=arm64 go build -ldflags "-X '${BUILDINFO}.GitSha=${GIT_SHA}' -X '${BUILDINFO}.GitTag=${GIT_TAG}' -s -w" -o bin/darwin-arm64/${NAME}
+	env GOOS=darwin GOARCH=arm64 go build -ldflags "${GO_LDFLAGS}" -o bin/darwin-arm64/${NAME}
 
 windows-cross: ${GIT_STATE} Icon.png
 	@command -v fyne-cross >/dev/null || { \
@@ -123,7 +124,7 @@ windows-cross: ${GIT_STATE} Icon.png
 bin/windows-amd64/${NAME}.exe: $(SRCS) ${GIT_STATE} rsrc_windows_amd64.syso
 	@mkdir -p bin/windows-amd64/
 	@echo "Building windows/amd64..."
-	env GOOS=windows GOARCH=amd64 go build -ldflags "-X '${BUILDINFO}.GitSha=${GIT_SHA}' -X '${BUILDINFO}.GitTag=${GIT_TAG}' -s -w" -o bin/windows-amd64/${NAME}.exe
+	env GOOS=windows GOARCH=amd64 go build -ldflags "${GO_LDFLAGS}" -o bin/windows-amd64/${NAME}.exe
 
 .PHONY: run-darwin
 run-darwin: darwin
@@ -139,7 +140,7 @@ package/darwin/$(APP_NAME).app: $(SRCS) Icon.png ${GIT_STATE}
 	@rm -rf package/darwin/$(APP_NAME).app
 	@# `fyne package` calls `go build` without linker flags. It only picks them
 	@# up from GOFLAGS, so without this the bundle reports version "dev".
-	GOFLAGS="${GO_LDFLAGS}" fyne package -os darwin -name $(APP_NAME) -release -use-raw-icon \
+	GOFLAGS="${FYNE_GOFLAGS}" fyne package -os darwin -name $(APP_NAME) -release -use-raw-icon \
 		-appVersion $(APP_VERSION) -appBuild $(APP_BUILD)
 	mv $(APP_NAME).app package/darwin/
 
