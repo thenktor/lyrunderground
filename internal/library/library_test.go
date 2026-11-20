@@ -2,6 +2,8 @@ package library
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -119,5 +121,45 @@ func TestReadTrack(t *testing.T) {
 
 	if _, err := ReadTrack("testdata/does-not-exist.mp3"); err == nil {
 		t.Fatal("expected error for missing file")
+	}
+}
+
+func TestScanSkipsHiddenFiles(t *testing.T) {
+	dir := t.TempDir()
+	audio, err := os.ReadFile("testdata/sample.mp3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// macOS writes AppleDouble sidecars ("._track.mp3") next to files on FAT
+	// and network volumes. They carry a supported extension but no audio.
+	if err := os.WriteFile(filepath.Join(dir, "._sample.mp3"), []byte("Mac OS X        \x00\x00\x00"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".hidden.flac"), []byte("not audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "sample.mp3"), audio, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	tracks, fileErrors, err := Scan(context.Background(), dir, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tracks) != 1 {
+		var names []string
+		for _, track := range tracks {
+			names = append(names, track.FileName)
+		}
+		t.Fatalf("got %d tracks (%v), want only sample.mp3", len(tracks), names)
+	}
+	if len(fileErrors) != 0 {
+		t.Fatalf("unexpected file errors: %v", fileErrors)
+	}
+	if tracks[0].FileName != "sample.mp3" {
+		t.Fatalf("got track %q, want sample.mp3", tracks[0].FileName)
+	}
+	if tracks[0].Warnings != nil {
+		t.Fatalf("unexpected warnings: %v", tracks[0].Warnings)
 	}
 }

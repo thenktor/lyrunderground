@@ -132,6 +132,12 @@ func Scan(ctx context.Context, root string, progress ScanProgress) (tracks []Tra
 			}
 			return nil
 		}
+		// Skip hidden files and macOS AppleDouble sidecars ("._track.mp3",
+		// "._sample.flac"). They carry a supported extension but contain no
+		// readable audio, so scanning them only produces junk rows.
+		if strings.HasPrefix(d.Name(), ".") {
+			return nil
+		}
 		if _, ok := supportedExtensions[strings.ToLower(filepath.Ext(path))]; ok {
 			files = append(files, path)
 		}

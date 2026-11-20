@@ -261,6 +261,13 @@ func (c *Client) do(ctx context.Context, method, endpoint string, query url.Valu
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// A request that fails on the network may still have reached the server.
+	// Only idempotent methods may be repeated in that case: POST /api/publish
+	// would otherwise create a duplicate revision or burn its single-use
+	// publish token. Throttling responses (429/503) are safe to retry for all
+	// methods, because the request was processed and rejected.
+	safeToRepeat := method == http.MethodGet || method == http.MethodHead
+
 	var lastErr error
 	for attempt := 0; attempt <= c.MaxRetries; attempt++ {
 		if err := c.waitLocked(ctx); err != nil {
@@ -288,7 +295,7 @@ func (c *Client) do(ctx context.Context, method, endpoint string, query url.Valu
 				return nil, 0, ctx.Err()
 			}
 			// A temporary network error is worth one retry, but not a tight loop.
-			if attempt < c.MaxRetries {
+			if safeToRepeat && attempt < c.MaxRetries {
 				if err := sleepContext(ctx, time.Second); err != nil {
 					return nil, 0, err
 				}

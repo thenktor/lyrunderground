@@ -971,6 +971,11 @@ func limitLyricsText(text string) (string, bool) {
 }
 
 func (a *App) applyCheckOutcome(st *trackState, record *lrclib.Record, err error) {
+	// Defensive guard: a successful lookup without a record must never reach
+	// the record-based branches below, which would dereference nil.
+	if err == nil && record == nil {
+		err = errors.New("LRCLIB hat keine gültige Antwort geliefert")
+	}
 	switch {
 	case errors.Is(err, lrclib.ErrNotFound):
 		st.checked = true
@@ -1094,9 +1099,14 @@ func (a *App) applyUploadOutcome(st *trackState, outcome uploadOutcome, record *
 		st.exists = true
 		st.forceUpload = false
 		if st.instrumentalUpload {
+			// No lyrics were uploaded, so the edit state of the tag field is
+			// unrelated and keeps its "Lyrics geändert" marker.
 			st.serverLyrics = ""
 		} else {
 			st.serverLyrics = st.lyrics
+			// The uploaded text is now the stored state of this track, so the
+			// "Lyrics geändert" marker must not stay visible.
+			st.originalLyrics = st.lyrics
 		}
 		if record != nil {
 			st.recordID = record.ID

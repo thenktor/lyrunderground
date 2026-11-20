@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -216,5 +217,56 @@ func TestCheckFallsBackWithoutAlbum(t *testing.T) {
 	}
 	if albumFilters[0] != "Album" || albumFilters[1] != "" {
 		t.Fatalf("unexpected album filters: %#v", albumFilters)
+	}
+}
+
+// failingTransport simulates a connection that never reaches the server.
+type failingTransport struct {
+	calls atomic.Int32
+}
+
+func (t *failingTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	t.calls.Add(1)
+	return nil, errors.New("network unreachable")
+}
+
+func newFailingClient() (*Client, *failingTransport) {
+	transport := &failingTransport{}
+	return &Client{
+		BaseURL:            "https://lrclib.invalid",
+		HTTPClient:         &http.Client{Transport: transport},
+		UserAgent:          appinfo.NAME + "-test",
+		MinRequestInterval: 0,
+		MaxRetries:         1,
+	}, transport
+}
+
+func TestNetworkErrorRetriesIdempotentRequests(t *testing.T) {
+	client, transport := newFailingClient()
+
+	_, err := client.Check(context.Background(), TrackInfo{ArtistName: "A", TrackName: "T"})
+	if err == nil {
+		t.Fatal("expected network error")
+	}
+	if got := transport.calls.Load(); got != 2 {
+		t.Fatalf("GET was sent %d times, want 2 (initial request plus one retry)", got)
+	}
+}
+
+func TestNetworkErrorDoesNotRetryPublish(t *testing.T) {
+	client, transport := newFailingClient()
+
+	err := client.Publish(context.Background(), PublishRequest{
+		TrackInfo: TrackInfo{ArtistName: "A", TrackName: "T", Duration: 100 * time.Second},
+		Lyrics:    "Zeile",
+	})
+	if err == nil {
+		t.Fatal("expected network error")
+	}
+	// The challenge request is a POST as well. Retrying it after a network
+	// error is safe, but the test asserts that the failing POST path is not
+	// silently repeated, which is what would burn a single-use publish token.
+	if got := transport.calls.Load(); got != 1 {
+		t.Fatalf("failing POST was sent %d times, want 1", got)
 	}
 }

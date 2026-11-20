@@ -148,9 +148,9 @@ rsrc_windows_amd64.syso: icon.ico
 	elif [ -x "$(HOME)/go/bin/rsrc" ]; then \
 		"$(HOME)/go/bin/rsrc" -arch amd64 -ico icon.ico; \
 	else \
-		@echo "WARNING: rsrc not found in PATH or at $(HOME)/go/bin/rsrc"; \
-		@echo "WARNING: will not create an Windows app icon."; \
-		@echo "WARNING: install with: go install github.com/akavel/rsrc@latest"; \
+		echo "WARNING: rsrc not found in PATH or at $(HOME)/go/bin/rsrc"; \
+		echo "WARNING: will not create a Windows app icon."; \
+		echo "WARNING: install with: go install github.com/akavel/rsrc@latest"; \
 	fi
 
 #

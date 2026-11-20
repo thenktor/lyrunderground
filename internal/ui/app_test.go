@@ -577,3 +577,52 @@ func TestLyricsChangedLabel(t *testing.T) {
 		t.Fatal("changed label must be hidden after restoring the original lyrics")
 	}
 }
+
+func TestApplyCheckOutcomeWithoutRecordDoesNotPanic(t *testing.T) {
+	a := &App{}
+	st := newTrackState(library.Track{Artist: "Artist", Title: "Title", Duration: 100 * time.Second})
+
+	a.applyCheckOutcome(st, nil, nil)
+
+	if st.checked {
+		t.Fatal("track must not be marked as checked without a record")
+	}
+	if st.importance != widget.DangerImportance {
+		t.Fatalf("importance = %v, want danger", st.importance)
+	}
+	if !strings.Contains(st.status, "fehlgeschlagen") {
+		t.Fatalf("status does not report the failure: %q", st.status)
+	}
+}
+
+func TestUploadClearsLyricsChangedMarker(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	win := test.NewWindow(nil)
+	win.Resize(fyne.NewSize(1200, 800))
+	a := New(win)
+	a.autoCheck = false
+
+	st := newTrackState(library.Track{
+		Artist: "Artist", Title: "Title", Duration: 100 * time.Second,
+		Lyrics: "Original lyrics",
+	})
+	a.tracks = []*trackState{st}
+	a.selected = 0
+	a.updateDetail()
+
+	a.detailLyrics.SetText("Uploaded lyrics")
+	if !a.lyricsChangedLabel.Visible() {
+		t.Fatal("changed label must be visible before the upload")
+	}
+
+	a.applyUploadOutcome(st, outcomeUploaded, nil, nil)
+	a.updateDetail()
+
+	if a.lyricsChangedLabel.Visible() {
+		t.Fatal("changed label must be hidden after a successful upload")
+	}
+	if st.originalLyrics != "Uploaded lyrics" {
+		t.Fatalf("originalLyrics = %q, want the uploaded text", st.originalLyrics)
+	}
+}
