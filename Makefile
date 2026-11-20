@@ -3,6 +3,9 @@ APP_NAME := LyricsFromTheUnderground
 
 # Test files are excluded: they do not affect the binaries.
 SRCS := $(shell find . -type f -name '*.go' ! -name '*_test.go' | sort)
+# Everything the binaries are built from. The module files matter as well: a
+# dependency upgrade changes the binary without touching a single .go file.
+BUILD_DEPS := $(SRCS) $(wildcard go.mod go.sum)
 
 BUILDINFO := codeberg.org/unixery/buildinfo
 RSRC := $(shell command -v rsrc 2>/dev/null)
@@ -103,7 +106,7 @@ FYNE-CROSS := GOFLAGS="$(FYNE_GOFLAGS)" fyne-cross
 .PHONY: build
 build: bin/$(GOOS)-$(GOARCH)/$(NAME)$(EXT)
 
-bin/darwin-arm64/$(NAME): $(SRCS) $(GIT_STATE)
+bin/darwin-arm64/$(NAME): $(BUILD_DEPS) $(GIT_STATE)
 	@mkdir -p bin/darwin-arm64/
 	@echo "Building darwin/arm64..."
 	env GOOS=darwin GOARCH=arm64 go build -ldflags "$(GO_LDFLAGS)" -o bin/darwin-arm64/$(NAME)
@@ -123,7 +126,7 @@ windows-cross: $(GIT_STATE) Icon.png
 	@mkdir -p bin/windows-amd64
 	mv fyne-cross/bin/windows-amd64/$(NAME).exe bin/windows-amd64/$(NAME).exe
 
-bin/windows-amd64/$(NAME).exe: $(SRCS) $(GIT_STATE) rsrc_windows_amd64.syso
+bin/windows-amd64/$(NAME).exe: $(BUILD_DEPS) $(GIT_STATE) rsrc_windows_amd64.syso
 	@mkdir -p bin/windows-amd64/
 	@echo "Building windows/amd64..."
 	env GOOS=windows GOARCH=amd64 go build -ldflags "$(GO_LDFLAGS)" -o bin/windows-amd64/$(NAME).exe
@@ -136,7 +139,7 @@ run-darwin: darwin
 #
 # PACKAGING
 #
-package/darwin/$(APP_NAME).app: $(SRCS) Icon.png $(GIT_STATE)
+package/darwin/$(APP_NAME).app: $(BUILD_DEPS) Icon.png $(GIT_STATE)
 	@mkdir -p package/darwin/
 	@echo "Packaging for darwin ($(APP_NAME) $(APP_VERSION) build $(APP_BUILD))..."
 	@rm -rf package/darwin/$(APP_NAME).app
@@ -189,7 +192,7 @@ icon.ico: images/icon-fullsize.svg
 #Icon.png: images/icon-fullsize.webp
 #	magick images/icon-fullsize.webp -resize 1024x1024 -write Icon.png null:
 Icon.png: images/icon-fullsize.svg
-	magick -background none "images/icon-fullsize.svg[1024x1024]" -define png:compression-level=9 "Icon.png" 2>/dev/null
+	@magick -background none "images/icon-fullsize.svg[1024x1024]" -define png:compression-level=9 "Icon.png" || exit 1;
 
 rsrc_windows_amd64.syso: icon.ico
 	@if [ -n "$(RSRC)" ]; then \
