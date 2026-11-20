@@ -92,6 +92,29 @@ bin/darwin/lyrunderground -version
 When building with the `Makefile`, the Git tag and commit SHA are embedded in
 the binary via `codeberg.org/unixery/buildinfo`.
 
+### Windows binaries
+
+Fyne renders through OpenGL/GLFW and is therefore always built with cgo. A
+Windows binary consequently needs a C toolchain for the target platform:
+cross-compiling with the host compiler fails at `runtime/cgo`.
+
+Two options are available:
+
+```bash
+# Container based, no mingw-w64 on the host required:
+make windows-cross                        # uses podman
+make windows-cross FYNE_CROSS_ENGINE=docker
+
+# Direct cross build with mingw-w64 on the host (or natively on Windows):
+make windows
+```
+
+`windows-cross` uses [fyne-cross](https://github.com/fyne-io/fyne-cross)
+(`go install github.com/fyne-io/fyne-cross@latest`) and writes
+`bin/windows-amd64/lyrunderground.exe`, so the existing `sign-windows` target
+keeps working. `make build` only builds the macOS binary, because a plain local
+build has no Windows toolchain.
+
 ## Usage
 
 1. Click **Open album folder**, or enter the path and press Enter. The folder is

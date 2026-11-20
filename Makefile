@@ -65,15 +65,31 @@ ${GIT_STATE}: git-state
 		mv ${GIT_STATE}.tmp ${GIT_STATE}; \
 	fi
 
+# Fyne renders through OpenGL/GLFW, so every build is a cgo build. Building a
+# Windows binary therefore needs a C toolchain for the target platform, which is
+# not part of a plain local build. Windows binaries come either from
+# `make windows-cross` (containerised, no host toolchain) or from `make windows`
+# on a Windows host / CI runner with mingw-w64 installed.
 .PHONY: build
-build: darwin windows
+build: darwin
 
 .PHONY: sign
 sign: sign-windows sign-darwin
 
-.PHONY: darwin windows
+.PHONY: darwin windows windows-cross
 darwin: bin/darwin-arm64/${NAME}
 windows: bin/windows-amd64/${NAME}.exe
+
+# Container engine used by fyne-cross; pass e.g. FYNE_CROSS_ENGINE=docker to
+# override (an empty value lets fyne-cross autodetect).
+FYNE_CROSS_ENGINE ?= podman
+
+# Package metadata version. `git describe` yields values like v1.2.3-4-gabcde,
+# which fyne rejects, so anything but a plain tag falls back to 0.0.0.
+APP_VERSION := $(firstword $(subst -, ,$(patsubst v%,%,${GIT_TAG})))
+ifneq (,$(or $(filter n/a,${APP_VERSION}),$(if ${APP_VERSION},,x)))
+APP_VERSION := 0.0.0
+endif
 
 .PHONY: sign-darwin sign-windows
 sign-darwin:  bin/darwin-arm64/${NAME}-signed
@@ -86,6 +102,19 @@ bin/darwin-arm64/${NAME}: $(SRCS) ${GIT_STATE}
 	@mkdir -p bin/darwin-arm64/
 	@echo "Building darwin/arm64..."
 	env GOOS=darwin GOARCH=arm64 go build -ldflags "-X '${BUILDINFO}.GitSha=${GIT_SHA}' -X '${BUILDINFO}.GitTag=${GIT_TAG}' -s -w" -o bin/darwin-arm64/${NAME}
+
+windows-cross: ${GIT_STATE} Icon.png
+	@command -v fyne-cross >/dev/null || { \
+		echo "fyne-cross not found: go install github.com/fyne-io/fyne-cross@latest"; \
+		exit 1; \
+	}
+	@echo "Building windows/amd64 via fyne-cross (engine: $(if $(FYNE_CROSS_ENGINE),$(FYNE_CROSS_ENGINE),autodetect))..."
+	fyne-cross windows -arch amd64 \
+		-engine "$(FYNE_CROSS_ENGINE)" \
+		-name ${NAME} -icon Icon.png \
+		-app-id de.thomue.${NAME} -app-version ${APP_VERSION}
+	@mkdir -p bin/windows-amd64
+	mv fyne-cross/bin/windows-amd64/${NAME}.exe bin/windows-amd64/${NAME}.exe
 
 bin/windows-amd64/${NAME}.exe: $(SRCS) ${GIT_STATE} rsrc_windows_amd64.syso
 	@mkdir -p bin/windows-amd64/
@@ -163,4 +192,5 @@ clean:
 	rm -rf package/
 	rm -rf tmp/
 	rm -rf icon.ico rsrc_windows_amd64.syso
+	rm -rf fyne-cross/
 	rm -rf Icon.png
