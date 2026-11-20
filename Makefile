@@ -89,11 +89,14 @@ ifeq (${APP_BUILD},)
 APP_BUILD := 1
 endif
 
-# Linker flags that embed the Git metadata. Every -X has to be a separate
-# "-ldflags=" field inside GOFLAGS (see FYNE_GOFLAGS below), because fyne reads
-# them from there and joins them again.
+# Linker flags that embed the git metadata into the binary.
 GO_LDFLAGS := -X '${BUILDINFO}.GitSha=${GIT_SHA}' -X '${BUILDINFO}.GitTag=${GIT_TAG}' -s -w
+# `fyne package` builds the binary itself and only picks up linker flags from
+# GOFLAGS. Every -X has to be a separate "-ldflags=" field inside GOFLAGS,
+# because fyne reads them from there and joins them again.
 FYNE_GOFLAGS := -ldflags=-X=${BUILDINFO}.GitSha=${GIT_SHA} -ldflags=-X=${BUILDINFO}.GitTag=${GIT_TAG}
+FYNE := GOFLAGS="${FYNE_GOFLAGS}" fyne
+FYNE-CROSS := GOFLAGS="${FYNE_GOFLAGS}" fyne-cross
 
 .PHONY: sign-darwin sign-windows
 sign-darwin:  bin/darwin-arm64/${NAME}-signed
@@ -113,7 +116,7 @@ windows-cross: ${GIT_STATE} Icon.png
 		exit 1; \
 	}
 	@echo "Building windows/amd64 via fyne-cross (engine: $(if $(FYNE_CROSS_ENGINE),$(FYNE_CROSS_ENGINE),autodetect))..."
-	fyne-cross windows -arch amd64 \
+	$(FYNE-CROSS) windows -arch amd64 \
 		-engine "$(FYNE_CROSS_ENGINE)" \
 		-name ${NAME} -icon Icon.png \
 		-app-id de.unixery.${NAME} \
@@ -140,7 +143,7 @@ package/darwin/$(APP_NAME).app: $(SRCS) Icon.png ${GIT_STATE}
 	@rm -rf package/darwin/$(APP_NAME).app
 	@# `fyne package` calls `go build` without linker flags. It only picks them
 	@# up from GOFLAGS, so without this the bundle reports version "dev".
-	GOFLAGS="${FYNE_GOFLAGS}" fyne package -os darwin \
+	$(FYNE) package -os darwin \
 		-name $(APP_NAME) \
 		-app-id de.unixery.${NAME} \
 		-appVersion $(APP_VERSION) -appBuild $(APP_BUILD) \
